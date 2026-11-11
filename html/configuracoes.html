@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações</title>
+  <meta name="view-transition" content="same-origin">
+  <link rel="stylesheet" href="/css/global/global.css">
+  <link rel="stylesheet" href="/css/global/root.css">
+  <link rel="stylesheet" href="/css/configuracoes.css">
+  <link rel="stylesheet" href="/css/notificacoes.css">
+  <link rel="stylesheet" href="/css/publicacao-detalhes.css">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
+</head>
+
+<body>
+
+  <header class="header-global">
+    <div class="logo">
+      <i class="fa-solid fa-newspaper"></i>
+      <h2>Jornal<span>Online</span></h2>
+    </div>
+
+    <button class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false"
+      aria-controls="navPrincipal">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <nav class="nav-principal" id="navPrincipal">
+      <a href="/html/inicio.html">Início</a>
+      <a href="/html/feed.html">Feed</a>
+      <a href="/html/perfil.html">Minha Conta</a>
+      <a href="/html/configuracoes.html" class="ativo">Configurações</a>
+      <button type="button" class="btn-notificacoes" id="btnNotificacoes" aria-label="Abrir notificações"
+        aria-expanded="false" aria-controls="painelNotificacoes">
+        <i class="fa-regular fa-bell"></i>
+        <span id="contadorNotificacoes" class="contador-notificacoes" hidden>0</span>
+      </button>
+    </nav>
+  </header>
+
+
+  <div class="bolinhas bolinhas1"></div>
+  <div class="bolinhas bolinhas2"></div>
+
+  <main>
+
+    <section class="card-config">
+
+      <div class="topo-card">
+
+        <div class="foto">
+          <div class="engrenagem">
+            <i class="fa-solid fa-gear"></i>
+          </div>
+        </div>
+        <h1>Configurações</h1>
+      </div>
+
+      <div class="menu">
+
+        <a href="./sobre.html" class="item">
+          <div class="esquerda">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Sobre</span>
+          </div>
+          <i class="fa-solid fa-chevron-right"></i>
+        </a>
+
+        <a href="/html/adm.html" class="item" id="itemAdministracao">
+          <div class="esquerda">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>Administração</span>
+          </div>
+          <i class="fa-solid fa-chevron-right"></i>
+        </a>
+
+        <a href="dadospessoais.html" class="item">
+          <div class="esquerda">
+            <i class="fa-solid fa-user"></i>
+            <span>Dados Pessoais</span>
+          </div>
+          <i class="fa-solid fa-chevron-right"></i>
+        </a>
+
+        <a href="/html/login.html" class="item sair" id="sairConta">
+          <div class="esquerda">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Sair da Conta</span>
+          </div>
+          <i class="fa-solid fa-chevron-right"></i>
+        </a>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <div class="notificacoes-overlay" id="notificacoesOverlay" hidden></div>
+
+  <aside class="painel-notificacoes" id="painelNotificacoes" aria-label="Notificações" aria-hidden="true">
+    <div class="notificacoes-cabecalho">
+      <div>
+        <h2>Notificações</h2>
+      </div>
+
+      <button type="button" id="fecharNotificacoes" class="fechar-notificacoes" aria-label="Fechar notificações">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="notificacoes-ferramentas">
+      <span id="resumoNotificacoes">Nenhuma notificação</span>
+      <button type="button" id="marcarTodasLidas">Marcar todas como lidas</button>
+    </div>
+
+    <div class="lista-notificacoes" id="listaNotificacoes">
+      <div class="notificacoes-vazio">Carregando notificações...</div>
+    </div>
+  </aside>
+
+</body>
+<script src="/js/configuracoes.js"></script>
+<script src="/js/global/tema.js"></script>
+<script src="/js/global/header-scroll.js" defer></script>
+<script src="/js/notificacoes.js" defer></script>
+<script src="/js/publicacao-detalhes.js"></script>
+
+</html>

@@ -1,0 +1,248 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    overflow-y: scroll;
+    scroll-padding-top: 100px;
+}
+
+body {
+    font-family: "Montserrat", sans-serif;
+    padding-top: 82px;
+}
+
+.header-global {
+    width: 100%;
+    height: 82px;
+    background: linear-gradient(90deg, var(--primary), var(--secondary));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 7%;
+    color: var(--surface);
+    box-shadow: 0 4px 15px var(--primary-dark);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    transform: translateY(0);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    will-change: transform;
+}
+
+.header-global.header-oculto {
+    transform: translateY(calc(-100% - 25px));
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.header-global .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--surface);
+}
+
+.header-global .logo i {
+    font-size: 28px;
+}
+
+.header-global .logo h2 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+}
+
+.header-global .logo span {
+    font-weight: 300;
+}
+
+.header-global .nav-principal {
+    display: flex;
+    align-items: center;
+    gap: 35px;
+}
+
+.header-global .nav-principal a {
+    color: var(--surface);
+    text-decoration: none;
+    font-size: 15.5px;
+    font-weight: 400;
+    padding: 8px 0;
+    position: relative;
+    transition: 0.3s;
+}
+
+.header-global .nav-principal a:hover {
+    opacity: 0.9;
+}
+
+.header-global .nav-principal a::after {
+    content: "";
+    position: absolute;
+    width: 0;
+    height: 2px;
+    background: var(--surface);
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    border-radius: 10px;
+    transition: 0.3s;
+}
+
+.header-global .nav-principal a:hover::after,
+.header-global .nav-principal a.ativo::after {
+    width: 100%;
+}
+
+.header-global .menu-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: none;
+    background: transparent;
+    color: var(--surface);
+    font-size: 23px;
+    cursor: pointer;
+}
+
+#areaFeed .post,
+#areaPerfil {
+    scroll-margin-top: 100px;
+}
+
+@media (max-width: 768px) {
+    html {
+        scroll-padding-top: 90px;
+    }
+
+    body {
+        padding-top: 75px;
+    }
+
+    .header-global {
+        height: 75px;
+        padding: 0 5%;
+        flex-wrap: nowrap;
+    }
+
+    .header-global .logo {
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .header-global .logo i {
+        font-size: 25px;
+    }
+
+    .header-global .logo h2 {
+        font-size: 20px;
+        white-space: nowrap;
+    }
+
+    .header-global .menu-toggle {
+        display: flex;
+        flex-shrink: 0;
+    }
+
+    .header-global .nav-principal {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        padding: 12px 5% 20px;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+        box-shadow: 0 10px 20px color-mix(in srgb, var(--primary-dark) 25%, transparent);
+        z-index: 100;
+    }
+
+    .header-global .nav-principal.aberto {
+        display: flex;
+    }
+
+    .header-global .nav-principal a {
+        width: 100%;
+        padding: 13px 15px;
+        font-size: 14px;
+        text-align: left;
+        border-radius: 8px;
+    }
+
+    .header-global .nav-principal a:hover,
+    .header-global .nav-principal a.ativo {
+        background: color-mix(in srgb, var(--surface) 15%, transparent);
+        opacity: 1;
+    }
+
+    .header-global .nav-principal a::after {
+        display: none;
+    }
+
+    #areaFeed .post,
+    #areaPerfil {
+        scroll-margin-top: 90px;
+    }
+}
+
+@media (max-width: 480px) {
+    html {
+        scroll-padding-top: 80px;
+    }
+
+    body {
+        padding-top: 68px;
+    }
+
+    .header-global {
+        height: 68px;
+        padding: 0 16px;
+    }
+
+    .header-global .logo {
+        gap: 8px;
+    }
+
+    .header-global .logo i {
+        font-size: 22px;
+    }
+
+    .header-global .logo h2 {
+        font-size: 18px;
+    }
+
+    .header-global .menu-toggle {
+        width: 38px;
+        height: 38px;
+        font-size: 21px;
+    }
+
+    .header-global .nav-principal {
+        padding: 10px 15px 18px;
+    }
+
+    .header-global .nav-principal a {
+        font-size: 13px;
+        padding: 12px;
+    }
+
+    #areaFeed .post,
+    #areaPerfil {
+        scroll-margin-top: 80px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .header-global {
+        transition: none;
+    }
+}

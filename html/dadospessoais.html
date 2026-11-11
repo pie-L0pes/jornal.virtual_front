@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Dados Pessoais - JornalOnline</title>
+
+    <link rel="stylesheet" href="/css/global/global.css">
+    <link rel="stylesheet" href="/css/global/root.css">
+    <link rel="stylesheet" href="/css/dadospessoais.css">
+    <link rel="stylesheet" href="/css/notificacoes.css">
+    <link rel="stylesheet" href="/css/publicacao-detalhes.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+
+<body>
+
+    <header class="header-global">
+
+        <div class="logo">
+            <i class="fa-solid fa-newspaper"></i>
+            <h2>Jornal<span>Online</span></h2>
+        </div>
+
+        <nav class="nav-principal">
+            <a href="/html/inicio.html">Início</a>
+            <a href="/html/feed.html">Feed</a>
+            <a href="/html/perfil.html">Minha Conta</a>
+            <a href="/html/configuracoes.html" class="ativo">Configurações</a>
+            <button type="button" class="btn-notificacoes" id="btnNotificacoes" aria-label="Abrir notificações"
+                aria-expanded="false" aria-controls="painelNotificacoes">
+                <i class="fa-regular fa-bell"></i>
+                <span id="contadorNotificacoes" class="contador-notificacoes" hidden>0</span>
+            </button>
+        </nav>
+
+    </header>
+
+    <main class="container">
+
+        <section class="page-header">
+
+            <div>
+                <h1>Dados pessoais</h1>
+            </div>
+
+            <a href="configuracoes.html" class="btn-voltar">
+                <i class="fa-solid fa-arrow-left"></i>
+                Voltar
+            </a>
+
+        </section>
+
+        <section class="account-card">
+
+            <div class="card-title">
+                <h2>Informações da sua conta</h2>
+
+                <p>
+                    Confira seus dados pessoais e informações de acesso.
+                </p>
+            </div>
+
+            <div class="info-item">
+
+                <div class="icon">
+                    <i class="fa-regular fa-user"></i>
+                </div>
+
+                <div class="info-text">
+
+                    <span class="label">Nome</span>
+
+                    <strong id="nomeUsuario">
+                        Carregando...
+                    </strong>
+
+                </div>
+
+            </div>
+
+            <div class="info-item">
+
+                <div class="icon">
+                    <i class="fa-regular fa-envelope"></i>
+                </div>
+
+                <div class="info-text">
+
+                    <span class="label">E-mail</span>
+
+                    <strong id="emailUsuario">
+                        Carregando...
+                    </strong>
+
+                </div>
+
+            </div>
+
+            <div class="info-item">
+
+                <div class="icon">
+                    <i class="fa-solid fa-lock"></i>
+                </div>
+
+                <div class="info-text">
+
+                    <span class="label">Senha</span>
+
+                    <strong class="password">
+                        ••••••••
+                    </strong>
+
+                    <small>
+                        Sua senha está protegida.
+                    </small>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div class="notificacoes-overlay" id="notificacoesOverlay" hidden></div>
+
+    <aside class="painel-notificacoes" id="painelNotificacoes" aria-label="Notificações" aria-hidden="true">
+        <div class="notificacoes-cabecalho">
+            <div>
+                <h2>Notificações</h2>
+            </div>
+
+            <button type="button" id="fecharNotificacoes" class="fechar-notificacoes" aria-label="Fechar notificações">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="notificacoes-ferramentas">
+            <span id="resumoNotificacoes">Nenhuma notificação</span>
+            <button type="button" id="marcarTodasLidas">Marcar todas como lidas</button>
+        </div>
+
+        <div class="lista-notificacoes" id="listaNotificacoes">
+            <div class="notificacoes-vazio">Carregando notificações...</div>
+        </div>
+    </aside>
+
+    <script src="/js/global/tema.js"></script>
+    <script src="/js/dadospessoais.js"></script>
+    <script src="/js/global/header-scroll.js" defer></script>
+    <script src="/js/notificacoes.js" defer></script>
+    <script src="/js/publicacao-detalhes.js"></script>
+
+</body>
+
+</html>

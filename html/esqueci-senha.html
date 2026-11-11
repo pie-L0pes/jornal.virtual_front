@@ -1,0 +1,42 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar senha | JornalOnline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/recuperacao.css">
+    <script src="../js/recuperacao.js" defer></script>
+</head>
+<body>
+    <main class="pagina-login">
+        <section class="login-container">
+            <div class="linha-titulo"></div>
+            <h1>Esqueceu sua senha?</h1>
+            <p class="descricao">
+                Informe seu e-mail cadastrado e enviaremos um link para você criar uma nova senha.
+            </p>
+
+            <form id="formEsqueciSenha">
+                <div class="campo">
+                    <label for="email">E-mail</label>
+                    <div class="input-container">
+                        <span class="icone" aria-hidden="true">✉</span>
+                        <input type="email" id="email" placeholder="Digite seu e-mail" autocomplete="email" required>
+                    </div>
+                </div>
+
+                <p id="mensagem" class="mensagem" role="status" aria-live="polite"></p>
+                <button type="submit" class="botao-entrar">Enviar link de recuperação</button>
+            </form>
+
+            <p class="cadastro">
+                Lembrou sua senha? <a href="login.html">Voltar ao login</a>
+            </p>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir senha | JornalOnline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../css/recuperacao.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <script src="../js/recuperacao.js" defer></script>
+</head>
+
+<body>
+    <main class="pagina-login">
+        <section class="login-container">
+            <div class="linha-titulo"></div>
+            <h1>Nova senha</h1>
+            <p class="descricao">
+                Escolha uma nova senha para recuperar o acesso à sua conta.
+            </p>
+
+            <form id="formRedefinirSenha">
+                <div class="campo">
+                    <label for="novaSenha">Nova senha</label>
+                    <div class="input-container">
+                        <span class="icone" aria-hidden="true">
+                            <i class="fa-solid fa-lock"></i>
+                        </span>
+                        <input type="password" id="novaSenha" placeholder="Digite sua nova senha"
+                            autocomplete="new-password" minlength="8" required>
+                        <button type="button" class="mostrar-senha" data-alvo="novaSenha"
+                            aria-label="Mostrar senha">👁</button>
+                    </div>
+                </div>
+
+                <div class="campo">
+                    <label for="confirmarSenha">Confirmar nova senha</label>
+                    <div class="input-container">
+                        <span class="icone" aria-hidden="true">
+                            <i class="fa-solid fa-lock"></i>
+                        </span>
+                        <input type="password" id="confirmarSenha" placeholder="Confirme sua nova senha"
+                            autocomplete="new-password" minlength="8" required>
+                        <button type="button" class="mostrar-senha" data-alvo="confirmarSenha"
+                            aria-label="Mostrar senha">👁</button>
+                    </div>
+                </div>
+
+                <p id="mensagem" class="mensagem" role="status" aria-live="polite"></p>
+                <button type="submit" class="botao-entrar">Redefinir senha</button>
+            </form>
+
+            <p class="cadastro">
+                <a href="login.html">Voltar ao login</a>
+            </p>
+        </section>
+    </main>
+</body>
+
+</html>

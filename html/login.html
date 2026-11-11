@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="/css/login.css">
+    <link rel="stylesheet" href="/css/global/root.css">
+    <link rel="stylesheet" href="/css/global/global.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+</head>
+
+<body>
+
+    <main class="pagina-login">
+        <section class="login-container">
+            <div class="linha-titulo"></div>
+            <h1>LOGIN</h1>
+
+            <form id="formLogin">
+
+                <div class="campo">
+
+                    <label for="email">E-mail</label>
+
+                    <div class="input-container">
+
+                        <span class="icone">✉</span>
+
+                        <input type="email" id="email" name="email" placeholder="Digite seu e-mail" required>
+
+                    </div>
+
+                </div>
+
+                <div class="campo">
+
+                    <div class="senha-titulo">
+
+                        <label for="senha">Senha</label>
+
+                        <a href="esqueci-senha.html">Esqueceu a senha?</a>
+
+                    </div>
+
+                    <div class="input-container">
+
+                        <span class="icone">⌑</span>
+
+                        <input type="password" id="senha" name="senha" placeholder="Digite sua senha" required>
+
+                        <button type="button" class="mostrar-senha" id="mostrarSenha">
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+                <label class="lembrar">
+                    <input type="checkbox" id="lembrarMe">
+                    <span class="checkbox"></span>
+                    Lembrar-me
+                </label>
+
+                <button type="submit" class="botao-entrar">Entrar</button>
+
+            </form>
+
+        </section>
+
+    </main>
+
+    <script src="/js/login.js"></script>
+    <script src="/js/global/tema.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Administrativo</title>
+    <link rel="stylesheet" href="../css/global/global.css">
+    <link rel="stylesheet" href="../css/global/root.css">
+    <link rel="stylesheet" href="../css/adm.css">
+</head>
+
+<body>
+    <div class="admin-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">
+                    <span>✦</span>
+                </div>
+                <div>
+                    <strong>Painel</strong>
+                    <small>Administrativo</small>
+                </div>
+            </div>
+
+            <nav class="menu">
+                <button type="button" class="menu-item ativo" data-section="dashboard">
+                    <span class="menu-icon">⌂</span>
+                    <span>Dashboard</span>
+                </button>
+                <button type="button" class="menu-item" data-section="usuarios">
+                    <span class="menu-icon">♙</span>
+                    <span>Gerenciar usuários</span>
+                </button>
+                <button type="button" class="menu-item" data-section="aparencia">
+                    <span class="menu-icon">◐</span>
+                    <span>Personalizar aparência</span>
+                </button>
+                <button type="button" class="menu-item" data-section="empresa">
+                    <span class="menu-icon">▣</span>
+                    <span>Informações da empresa</span>
+                </button>
+                <button type="button" class="menu-item" data-section="denuncias">
+                    <span class="menu-icon">⚑</span>
+                    <span>Denúncias</span>
+                    <span id="contadorDenuncias" class="menu-badge">0</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <button type="button" id="btnSair" class="menu-item sair">
+                    <span class="menu-icon">↪</span>
+                    <span>Sair</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="admin-header">
+                <div class="header-title">
+                    <span id="tituloPagina">Dashboard</span>
+                </div>
+                <div class="admin-profile">
+                    <div class="admin-info">
+                        <strong id="nomeAdministrador">Carregando...</strong>
+                        <span>Administrador</span>
+                    </div>
+                    <img id="fotoAdministrador" class="admin-photo" src="/img/avatar-padrao.png"
+                        alt="Foto do administrador">
+                </div>
+            </header>
+
+            <section class="page-content">
+                <section id="dashboard" class="admin-section ativa">
+                    <div class="welcome">
+                        <div>
+                            <span class="welcome-label">PAINEL ADMINISTRATIVO</span>
+                            <h1>Olá, <span id="nomeWelcome">Administrador</span>!</h1>
+                            <p>Gerencie os recursos e usuários da sua empresa através deste painel.</p>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-company">
+                        <span class="company-label">EMPRESA</span>
+                        <h2 id="nomeEmpresa">Carregando empresa...</h2>
+                    </div>
+
+                    <div class="dashboard-card">
+                        <div class="card-title">
+                            <div class="card-icon">✓</div>
+                            <div>
+                                <h3>Seus acessos</h3>
+                                <p>Como administrador, você possui acesso às seguintes funcionalidades:</p>
+                            </div>
+                        </div>
+
+                        <div class="access-list">
+                            <div class="access-item">
+                                <span class="access-check">✓</span>
+                                <div>
+                                    <strong>Gerenciar usuários</strong>
+                                    <p>Cadastrar, editar e excluir usuários da empresa.</p>
+                                </div>
+                            </div>
+                            <div class="access-item">
+                                <span class="access-check">✓</span>
+                                <div>
+                                    <strong>Personalizar aparência</strong>
+                                    <p>Alterar o tema visual da empresa.</p>
+                                </div>
+                            </div>
+                            <div class="access-item">
+                                <span class="access-check">✓</span>
+                                <div>
+                                    <strong>Informações da empresa</strong>
+                                    <p>Visualizar e atualizar os dados da empresa.</p>
+                                </div>
+                            </div>
+                            <div class="access-item">
+                                <span class="access-check">✓</span>
+                                <div>
+                                    <strong>Gerenciar denúncias</strong>
+                                    <p>Analisar denúncias de publicações e comentários.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="usuarios" class="admin-section">
+                    <div class="section-heading usuarios-heading">
+                        <div>
+                            <span class="section-label">ADMINISTRAÇÃO</span>
+                            <h1>Gerenciar usuários</h1>
+                            <p>Visualize, pesquise e gerencie os usuários vinculados à sua empresa.</p>
+                        </div>
+                    </div>
+
+                    <div class="users-panel">
+                        <div class="users-panel-header">
+                            <div class="users-title">
+                                <div>
+                                    <h3>Usuários cadastrados</h3>
+                                    <span id="totalUsuarios">0 usuários</span>
+                                </div>
+                            </div>
+
+                            <div class="users-search">
+                                <span class="search-icon">⌕</span>
+                                <input type="text" id="pesquisaUsuario" placeholder="Pesquisar por nome ou email...">
+                            </div>
+                        </div>
+
+                        <div class="users-table-wrapper">
+                            <table class="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>Usuário</th>
+                                        <th>Email</th>
+                                        <th>Tipo de usuário</th>
+                                        <th>Cadastro</th>
+                                        <th class="actions-column">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabelaUsuarios"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="users-empty" id="usuariosVazio" style="display:none;">
+                            <div class="users-empty-icon">♙</div>
+                            <strong>Nenhum usuário encontrado</strong>
+                            <p>Não existem usuários correspondentes à pesquisa.</p>
+                        </div>
+                    </div>
+
+                    <button type="button" id="btnNovoUsuario" class="floating-button" title="Cadastrar usuário"
+                        aria-label="Cadastrar usuário">+</button>
+                </section>
+
+                <section id="aparencia" class="admin-section">
+                    <div class="section-heading">
+                        <div>
+                            <span class="section-label">PERSONALIZAÇÃO</span>
+                            <h1>Personalizar aparência</h1>
+                            <p>Escolha um tema pronto ou personalize as cores da empresa.</p>
+                        </div>
+                    </div>
+
+                    <div class="appearance-card">
+                        <div class="appearance-header">
+                            <div>
+                                <h3>Temas prontos</h3>
+                                <p>Escolha uma combinação de cores já preparada.</p>
+                            </div>
+                        </div>
+                        <div id="listaTemas" class="themes-grid"></div>
+                    </div>
+
+                    <div class="appearance-card">
+                        <div class="appearance-header">
+                            <div>
+                                <h3>Tema personalizado</h3>
+                                <p>Escolha manualmente as cores da sua empresa.</p>
+                            </div>
+                        </div>
+
+                        <div class="color-grid">
+                            <label>Cor principal<input type="color" id="corPrimary"></label>
+                            <label>Cor principal escura<input type="color" id="corPrimaryDark"></label>
+                            <label>Cor secundária<input type="color" id="corSecondary"></label>
+                            <label>Cor secundária clara<input type="color" id="corSecondaryLight"></label>
+                            <label>Fundo<input type="color" id="corBackground"></label>
+                            <label>Superfície<input type="color" id="corSurface"></label>
+                            <label>Texto<input type="color" id="corText"></label>
+                            <label>Texto claro<input type="color" id="corTextLight"></label>
+                            <label>Borda<input type="color" id="corBorder"></label>
+                            <label>Erro<input type="color" id="corDanger"></label>
+                        </div>
+
+                        <button type="button" id="btnSalvarTema" class="primary-button">Salvar personalização</button>
+                    </div>
+                </section>
+
+                <section class="admin-section" id="empresa">
+                    <div class="section-heading">
+                        <span class="section-label">EMPRESA</span>
+                        <h1>Informações da empresa</h1>
+                        <p>Visualize e gerencie as informações da empresa.</p>
+                    </div>
+
+                    <div class="company-info-card">
+                        <div class="company-info-header">
+                            <div>
+                                <h2 id="infoEmpresaNome">Empresa</h2>
+                                <span>Informações cadastradas</span>
+                            </div>
+                            <button type="button" class="primary-button" id="btnModificarEmpresa">✎ Modificar
+                                informações</button>
+                        </div>
+
+                        <div class="company-info-grid">
+                            <div class="company-info-item">
+                                <span>Nome</span>
+                                <strong id="infoEmpresaNomeCompleto">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>CNPJ</span>
+                                <strong id="infoEmpresaCnpj">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>E-mail</span>
+                                <strong id="infoEmpresaEmail">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>Telefone</span>
+                                <strong id="infoEmpresaTelefone">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>Endereço</span>
+                                <strong id="infoEmpresaEndereco">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>Cidade</span>
+                                <strong id="infoEmpresaCidade">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>Estado</span>
+                                <strong id="infoEmpresaEstado">-</strong>
+                            </div>
+                            <div class="company-info-item">
+                                <span>CEP</span>
+                                <strong id="infoEmpresaCep">-</strong>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="modal-overlay" id="modalEmpresa">
+                    <div class="modal">
+                        <button type="button" class="modal-close" id="fecharModalEmpresa">×</button>
+
+                        <div class="modal-heading">
+                            <span class="section-label">EMPRESA</span>
+                            <h2>Modificar informações</h2>
+                            <p>Atualize os dados cadastrados da empresa.</p>
+                        </div>
+
+                        <form id="formEmpresa">
+                            <label>Nome da empresa<input type="text" id="empresaNome" required></label>
+                            <label>CNPJ<input type="text" id="empresaCnpj" required></label>
+                            <label>E-mail<input type="email" id="empresaEmail"></label>
+                            <label>Telefone<input type="text" id="empresaTelefone"></label>
+                            <label>Endereço<input type="text" id="empresaEndereco"></label>
+                            <label>Cidade<input type="text" id="empresaCidade"></label>
+                            <label>Estado<input type="text" id="empresaEstado"></label>
+                            <label>CEP<input type="text" id="empresaCep"></label>
+
+                            <div class="modal-actions">
+                                <button type="button" class="secondary-button" id="cancelarEmpresa">Cancelar</button>
+                                <button type="submit" class="primary-button">Salvar alterações</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <section id="denuncias" class="admin-section">
+                    <div class="section-heading">
+                        <div>
+                            <span class="section-label">MODERAÇÃO</span>
+                            <h1>Denúncias</h1>
+                            <p>Analise as denúncias realizadas pelos usuários.</p>
+                        </div>
+                    </div>
+
+                    <div class="denuncia-tabs">
+                        <button type="button" class="denuncia-tab ativo" data-tipo="todas">Todas</button>
+                        <button type="button" class="denuncia-tab" data-tipo="publicacao">Publicações</button>
+                        <button type="button" class="denuncia-tab" data-tipo="comentario">Comentários</button>
+                    </div>
+
+                    <div id="listaDenuncias" class="denuncias-list"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <div id="modalUsuario" class="modal-overlay">
+        <div class="modal">
+            <button type="button" class="modal-close" id="fecharModalUsuario">×</button>
+
+            <div class="modal-heading">
+                <span class="section-label">USUÁRIO</span>
+                <h2 id="tituloModalUsuario">Cadastrar usuário</h2>
+                <p>Preencha os dados do usuário.</p>
+            </div>
+
+            <form id="formUsuario">
+                <input type="hidden" id="usuarioId">
+
+                <label>Nome<input type="text" id="usuarioNome" required></label>
+                <label>Email<input type="email" id="usuarioEmail" required></label>
+                <label id="campoSenha">Senha<input type="password" id="usuarioSenha"></label>
+
+                <label>
+                    Tipo de usuário
+                    <select id="usuarioTipo" required>
+                        <option value="USUARIO">Usuário</option>
+                        <option value="VERIFICADO">Verificado</option>
+                        <option value="ADMINISTRADOR">Administrador</option>
+                    </select>
+                </label>
+
+                <label>Bio<textarea id="usuarioBio" rows="3"></textarea></label>
+
+                <div class="modal-actions">
+                    <button type="button" class="secondary-button" id="cancelarUsuario">Cancelar</button>
+                    <button type="submit" class="primary-button">Continuar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modalConfirmarUsuario" class="modal-overlay">
+        <div class="modal modal-small">
+            <div class="confirm-icon">?</div>
+            <h2>Confirmar cadastro</h2>
+            <p>Confira os dados antes de cadastrar o usuário.</p>
+            <div id="resumoUsuario" class="user-summary"></div>
+
+            <div class="modal-actions">
+                <button type="button" id="cancelarConfirmacao" class="secondary-button">Voltar</button>
+                <button type="button" id="confirmarCadastro" class="primary-button">Confirmar cadastro</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalDenuncia" class="modal-overlay">
+        <div class="modal">
+            <button type="button" class="modal-close" id="fecharModalDenuncia">×</button>
+
+            <div class="modal-heading">
+                <span class="section-label">MODERAÇÃO</span>
+                <h2>Analisar denúncia</h2>
+            </div>
+
+            <div id="detalhesDenuncia"></div>
+
+            <div class="moderation-actions">
+                <button type="button" id="btnRecusarDenuncia" class="danger-outline-button">Recusar denúncia</button>
+                <button type="button" id="btnAceitarDenuncia" class="danger-button">Aceitar e excluir</button>
+            </div>
+        </div>
+    </div>
+    <script src="../js/global/tema.js"></script>
+    <script src="../js/adm.js"></script>
+    <script src="/js/publicacao-detalhes.js"></script>
+
+</body>
+
+</html>
