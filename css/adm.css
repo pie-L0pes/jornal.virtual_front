@@ -1870,54 +1870,22 @@ select:focus {
     height: 75px !important;
     min-height: 75px;
     max-height: 75px;
-    flex: 0 0 75px;
+    padding-top: 0;
+    padding-bottom: 0;
     box-sizing: border-box;
-    padding: 0 40px;
-    overflow: hidden;
-}
-
-.header-title {
-    display: none;
 }
 
 .page-content {
-    padding: 24px 40px;
+    padding-top: 20px;
+    padding-bottom: 40px;
 }
 
 .section-heading {
+    margin-top: 0;
     margin-bottom: 22px;
 }
 
 .section-heading h1 {
-    margin: 5px 0;
-}
-
-@media (max-width: 1100px) {
-    .admin-header {
-        padding: 0 25px;
-    }
-
-    .page-content {
-        padding: 24px 25px;
-    }
-}
-
-@media (max-width: 750px) {
-    .admin-header {
-        height: 70px !important;
-        min-height: 70px;
-        max-height: 70px;
-        flex-basis: 70px;
-        padding: 0 20px;
-    }
-
-    .page-content {
-        padding: 22px 20px;
-    }
-}
-
-@media (max-width: 600px) {
-    .page-content {
-        padding: 18px 15px;
-    }
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
