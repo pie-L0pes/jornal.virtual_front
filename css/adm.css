@@ -1866,26 +1866,6 @@ select:focus {
     }
 }
 
-.admin-header {
-    height: 75px !important;
-    min-height: 75px;
-    max-height: 75px;
-    padding-top: 0;
-    padding-bottom: 0;
-    box-sizing: border-box;
-}
-
-.page-content {
-    padding-top: 20px;
-    padding-bottom: 40px;
-}
-
-.section-heading {
-    margin-top: 0;
-    margin-bottom: 22px;
-}
-
-.section-heading h1 {
-    margin-top: 5px;
-    margin-bottom: 5px;
+body{
+padding-top: 1px;
 }
