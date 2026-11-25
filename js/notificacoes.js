@@ -13,35 +13,64 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
+    const apiUrl = (
+        typeof API_URL !== "undefined"
+            ? API_URL
+            : "https://jornalvirtual-git-main-biaams-sys1.vercel.app"
+    ).replace(/\/+$/, "");
+
     if (!token) return;
 
-    function obterUsuario() {
+    function obterUsuarioNotificacoes() {
         try {
-            const parte = token.split(".")[1]
+            const partes = token.split(".");
+
+            if (partes.length !== 3) return null;
+
+            const parte = partes[1]
                 .replace(/-/g, "+")
                 .replace(/_/g, "/");
 
-            const texto = atob(parte);
+            const base64 = parte.padEnd(
+                Math.ceil(parte.length / 4) * 4,
+                "="
+            );
+
+            const texto = atob(base64);
 
             const json = decodeURIComponent(
                 Array.from(texto)
                     .map(caractere =>
-                        "%" + caractere.charCodeAt(0).toString(16).padStart(2, "0")
+                        "%" + caractere.charCodeAt(0)
+                            .toString(16)
+                            .padStart(2, "0")
                     )
                     .join("")
             );
 
-            return JSON.parse(json);
+            const usuario = JSON.parse(json);
+
+            if (
+                typeof usuario.exp === "number" &&
+                usuario.exp * 1000 <= Date.now()
+            ) {
+                return null;
+            }
+
+            return usuario;
         } catch (erro) {
             console.error("Erro ao identificar usuário:", erro);
             return null;
         }
     }
 
-    const usuario = obterUsuario();
-    const usuarioId = Number(usuario?.id || usuario?.usuarioId);
+    const usuario = obterUsuarioNotificacoes();
 
-    if (!usuarioId) return;
+    const usuarioId = Number(
+        usuario?.id || usuario?.usuarioId
+    );
+
+    if (!Number.isInteger(usuarioId) || usuarioId <= 0) return;
 
     const chaveLidas = `notificacoes_lidas_${usuarioId}`;
 
@@ -49,35 +78,42 @@ document.addEventListener("DOMContentLoaded", () => {
     let usuarios = new Map();
     let carregando = false;
 
-    function obterApi() {
-        return typeof API_URL !== "undefined"
-            ? String(API_URL).replace(/\/+$/, "")
-            : null;
-    }
+    async function requisicaoNotificacoes(rota) {
+        let resposta;
 
-    async function requisicao(rota) {
-        const base = obterApi();
-
-        if (!base) {
-            throw new Error("API_URL não está configurada.");
+        try {
+            resposta = await fetch(`${apiUrl}${rota}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+        } catch {
+            throw new Error(
+                "Não foi possível conectar ao servidor."
+            );
         }
 
-        const resposta = await fetch(`${base}${rota}`, {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        });
+        const dados = await resposta.json().catch(() => ({}));
 
         if (!resposta.ok) {
-            throw new Error(`Erro HTTP ${resposta.status}`);
+            throw new Error(
+                dados.mensagem ||
+                dados.erro ||
+                dados.error ||
+                `Erro HTTP ${resposta.status}`
+            );
         }
 
-        return resposta.json();
+        return dados;
     }
 
     function obterLidas() {
         try {
-            const dados = JSON.parse(localStorage.getItem(chaveLidas));
+            const dados = JSON.parse(
+                localStorage.getItem(chaveLidas)
+            );
+
             return Array.isArray(dados) ? dados : [];
         } catch {
             return [];
@@ -85,7 +121,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function salvarLidas(ids) {
-        localStorage.setItem(chaveLidas, JSON.stringify([...new Set(ids)]));
+        try {
+            localStorage.setItem(
+                chaveLidas,
+                JSON.stringify([...new Set(ids)])
+            );
+        } catch (erro) {
+            console.error(
+                "Erro ao salvar notificações lidas:",
+                erro
+            );
+        }
     }
 
     function abrirPainel() {
@@ -93,7 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
         painel.setAttribute("aria-hidden", "false");
         botao.setAttribute("aria-expanded", "true");
 
-        if (overlay) overlay.hidden = false;
+        if (overlay) {
+            overlay.hidden = false;
+        }
 
         carregarNotificacoes();
     }
@@ -103,7 +151,9 @@ document.addEventListener("DOMContentLoaded", () => {
         painel.setAttribute("aria-hidden", "true");
         botao.setAttribute("aria-expanded", "false");
 
-        if (overlay) overlay.hidden = true;
+        if (overlay) {
+            overlay.hidden = true;
+        }
     }
 
     function atualizarContador() {
@@ -114,7 +164,10 @@ document.addEventListener("DOMContentLoaded", () => {
         ).length;
 
         if (contador) {
-            contador.textContent = quantidade > 99 ? "99+" : quantidade;
+            contador.textContent = quantidade > 99
+                ? "99+"
+                : String(quantidade);
+
             contador.hidden = quantidade === 0;
         }
 
@@ -134,7 +187,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function registrarUsuario(dados) {
         if (!dados || typeof dados !== "object") return;
 
-        const id = Number(dados.id ?? dados.usuarioId);
+        const id = Number(
+            dados.id ?? dados.usuarioId
+        );
 
         if (!id || !dados.nome) return;
 
@@ -154,6 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
             for (const comentario of comentarios || []) {
                 registrarUsuario(comentario.autor);
                 registrarUsuario(comentario.usuario);
+
                 percorrerComentarios(comentario.respostas);
             }
         }
@@ -163,7 +219,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function carregarUsuarios() {
         try {
-            const resposta = await requisicao("/usuarios/listar");
+            const resposta = await requisicaoNotificacoes(
+                "/usuarios/listar"
+            );
 
             const listaUsuarios = Array.isArray(resposta)
                 ? resposta
@@ -292,7 +350,9 @@ document.addEventListener("DOMContentLoaded", () => {
         carregando = true;
 
         try {
-            const dados = await requisicao("/publicacoes/listar");
+            const dados = await requisicaoNotificacoes(
+                "/publicacoes/listar"
+            );
 
             const publicacoes = Array.isArray(dados)
                 ? dados
@@ -325,10 +385,13 @@ document.addEventListener("DOMContentLoaded", () => {
                         criarNotificacao(
                             "curtida",
                             autorId,
-                            curtida.usuario?.nome || curtida.autor?.nome,
+                            curtida.usuario?.nome ||
+                            curtida.autor?.nome,
                             publicacao.id,
-                            curtida.id || `${publicacao.id}_${autorId}`,
-                            curtida.dataCurtida || curtida.createdAt
+                            curtida.id ||
+                            `${publicacao.id}_${autorId}`,
+                            curtida.dataCurtida ||
+                            curtida.createdAt
                         );
                     }
                 }
@@ -337,7 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (!Array.isArray(comentarios)) {
                     try {
-                        const resposta = await requisicao(
+                        const resposta = await requisicaoNotificacoes(
                             `/comentarios/publicacao/${publicacao.id}`
                         );
 
@@ -380,13 +443,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
             });
 
-            notificacoes.sort((a, b) => {
-                return new Date(b.data || 0) - new Date(a.data || 0);
-            });
+            notificacoes.sort(
+                (a, b) =>
+                    new Date(b.data || 0) -
+                    new Date(a.data || 0)
+            );
 
             renderizarNotificacoes();
         } catch (erro) {
-            console.error("Erro ao carregar notificações:", erro);
+            console.error(
+                "Erro ao carregar notificações:",
+                erro
+            );
 
             lista.innerHTML = `
                 <div class="notificacoes-vazio">
@@ -405,7 +473,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const vazio = document.createElement("div");
 
             vazio.className = "notificacoes-vazio";
-            vazio.textContent = "Você ainda não possui notificações.";
+            vazio.textContent =
+                "Você ainda não possui notificações.";
 
             lista.appendChild(vazio);
             atualizarContador();
@@ -443,44 +512,59 @@ document.addEventListener("DOMContentLoaded", () => {
 
             mensagem.append(
                 nome,
-                document.createTextNode(` ${notificacao.mensagem}`)
+                document.createTextNode(
+                    ` ${notificacao.mensagem}`
+                )
             );
 
             conteudo.appendChild(mensagem);
 
-            const data = formatarDataNotificacao(notificacao.data);
+            const data = formatarDataNotificacao(
+                notificacao.data
+            );
 
             if (data) {
                 const horario = document.createElement("small");
+
                 horario.className = "notificacao-data";
                 horario.textContent = data;
+
                 conteudo.appendChild(horario);
             }
 
             item.append(icone, conteudo);
 
             item.addEventListener("click", () => {
-                if (typeof window.abrirPublicacaoNotificacao !== "function") {
+                if (
+                    typeof window.abrirPublicacaoNotificacao !== "function"
+                ) {
                     console.error(
                         "publicacao-detalhes.js não foi carregado."
                     );
 
-                    alert("Não foi possível abrir a publicação.");
+                    alert(
+                        "Não foi possível abrir a publicação."
+                    );
+
                     return;
                 }
 
                 const ids = obterLidas();
 
                 if (!ids.includes(notificacao.id)) {
-                    salvarLidas([...ids, notificacao.id]);
+                    salvarLidas([
+                        ...ids,
+                        notificacao.id
+                    ]);
                 }
 
-
-                atualizarContador();
+                renderizarNotificacoes();
 
                 window.abrirPublicacaoNotificacao(
                     notificacao.publicacaoId
                 );
+
+                fecharPainel();
             });
 
             lista.appendChild(item);
@@ -497,11 +581,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    fechar?.addEventListener("click", fecharPainel);
-    overlay?.addEventListener("click", fecharPainel);
+    fechar?.addEventListener(
+        "click",
+        fecharPainel
+    );
+
+    overlay?.addEventListener(
+        "click",
+        fecharPainel
+    );
 
     marcarTodas?.addEventListener("click", () => {
-        salvarLidas(notificacoes.map(item => item.id));
+        salvarLidas(
+            notificacoes.map(item => item.id)
+        );
+
         renderizarNotificacoes();
     });
 
@@ -514,5 +608,9 @@ document.addEventListener("DOMContentLoaded", () => {
     window.atualizarNotificacoes = carregarNotificacoes;
 
     carregarNotificacoes();
-    setInterval(carregarNotificacoes, 30000);
+
+    setInterval(
+        carregarNotificacoes,
+        30000
+    );
 });

@@ -1,466 +1,701 @@
-const modal = document.querySelector(".modal");
-const fechar = document.querySelector(".close");
-const cardsContainer = document.querySelector(".cards");
-const pesquisa = document.querySelector(".input-search input");
-const banner = document.querySelector(".banner");
-const tituloBanner = document.querySelector(".banner-info h1");
-const descricaoBanner = document.querySelector(".banner-info p");
-const categoriaBanner = document.querySelector(".banner-info .tag");
-const botaoAnterior = document.querySelector(".arrow.left");
-const botaoProximo = document.querySelector(".arrow.right");
-const botaoLerMais = document.querySelector(".btn-banner");
-const botaoCriar = document.getElementById("criarNoticia");
-const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-const apiUrl = (typeof API_URL !== "undefined" ? API_URL : "http://localhost:3000").replace(/\/$/, "");
-function noticiasDoBanner() {
-    return noticias.slice(0, 6);
-}
 
-let noticias = [];
-let indiceAtual = 0;
-let usuarioAtual = null;
+(() => {
+    const modal = document.querySelector(".modal");
+    const fechar = document.querySelector(".close");
+    const cardsContainer = document.querySelector(".cards");
+    const pesquisa = document.querySelector(".input-search input");
+    const banner = document.querySelector(".banner");
+    const tituloBanner = document.querySelector(".banner-info h1");
+    const descricaoBanner = document.querySelector(".banner-info p");
+    const categoriaBanner = document.querySelector(".banner-info .tag");
+    const botaoAnterior = document.querySelector(".arrow.left");
+    const botaoProximo = document.querySelector(".arrow.right");
+    const botaoLerMais = document.querySelector(".btn-banner");
+    const botaoCriar = document.getElementById("criarNoticia");
 
-function obterUsuarioToken() {
-    if (!token) return null;
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
-    try {
-        const parte = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-        const decodificado = atob(parte.padEnd(Math.ceil(parte.length / 4) * 4, "="));
-        const texto = decodeURIComponent(
-            Array.from(decodificado, caractere =>
-                `%${caractere.charCodeAt(0).toString(16).padStart(2, "0")}`
-            ).join("")
-        );
-        return JSON.parse(texto);
-    } catch {
-        return null;
+    const apiUrl = (
+        typeof API_URL !== "undefined"
+            ? API_URL
+            : "https://jornalvirtual-git-main-biaams-sys1.vercel.app"
+    ).replace(/\/+$/, "");
+
+    let noticias = [];
+    let indiceAtual = 0;
+    let usuarioAtual = null;
+    let slideAtual = null;
+    let animandoCarrossel = false;
+    let intervaloCarrossel = null;
+
+    function obterUsuarioTokenNoticias() {
+        if (!token) return null;
+
+        try {
+            const partes = token.split(".");
+
+            if (partes.length !== 3) return null;
+
+            const parte = partes[1]
+                .replace(/-/g, "+")
+                .replace(/_/g, "/");
+
+            const base64 = parte.padEnd(
+                Math.ceil(parte.length / 4) * 4,
+                "="
+            );
+
+            const decodificado = atob(base64);
+
+            const texto = decodeURIComponent(
+                Array.from(decodificado, caractere =>
+                    `%${caractere.charCodeAt(0).toString(16).padStart(2, "0")}`
+                ).join("")
+            );
+
+            const dados = JSON.parse(texto);
+
+            if (
+                typeof dados.exp === "number" &&
+                dados.exp * 1000 <= Date.now()
+            ) {
+                return null;
+            }
+
+            return dados;
+        } catch {
+            return null;
+        }
     }
-}
 
-usuarioAtual = obterUsuarioToken();
+    usuarioAtual = obterUsuarioTokenNoticias();
 
-const tipoUsuario = usuarioAtual?.tipo;
-const administrador = tipoUsuario === "ADMINISTRADOR";
-const verificado = tipoUsuario === "VERIFICADO";
-const podeCriar = administrador || verificado;
+    const tipoUsuario = usuarioAtual?.tipo;
+    const administrador = tipoUsuario === "ADMINISTRADOR";
+    const verificado = tipoUsuario === "VERIFICADO";
+    const podeCriar = administrador || verificado;
 
-if (!administrador) {
-    cardsContainer.classList.add("cards-horizontal");
-}
+    if (!administrador && cardsContainer) {
+        cardsContainer.classList.add("cards-horizontal");
+    }
 
-if (podeCriar) {
-    botaoCriar.hidden = false;
-}
+    if (botaoCriar) {
+        botaoCriar.hidden = !podeCriar;
+    }
 
-function podeGerenciar(noticia) {
-    if (administrador) return true;
+    function noticiasDoBanner() {
+        return noticias.slice(0, 6);
+    }
 
-    return verificado &&
-        Number(noticia.usuarioId) === Number(usuarioAtual?.id);
-}
+    function podeGerenciar(noticia) {
+        if (!usuarioAtual) return false;
 
-function escaparHtml(valor) {
-    return String(valor ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
+        if (administrador) return true;
 
-function formatarData(data) {
-    if (!data) return "";
+        return (
+            verificado &&
+            Number(noticia.usuarioId) === Number(usuarioAtual.id)
+        );
+    }
 
-    const dataConvertida = new Date(data);
+    function escaparHtml(valor) {
+        return String(valor ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
 
-    if (Number.isNaN(dataConvertida.getTime())) return "";
+    function formatarData(data) {
+        if (!data) return "";
 
-    return dataConvertida.toLocaleDateString("pt-BR");
-}
+        const dataConvertida = new Date(data);
 
+        if (Number.isNaN(dataConvertida.getTime())) {
+            return "";
+        }
+
+        return dataConvertida.toLocaleDateString("pt-BR");
+    }
+
+    
 function obterImagem(noticia) {
-    const midia = noticia.midias?.find(item =>
-        item.mimeType?.startsWith("image/")
-    );
+    const midia = noticia.midias?.find(item => {
+        const tipo = item.mimeType || item.tipo || "";
 
-    if (!midia?.path) return null;
+        return (
+            tipo.startsWith("image/") ||
+            /\.(png|jpe?g|webp|gif|avif|heic|heif)(\?|$)/i.test(
+                item.url || item.path || item.nomeArquivo || ""
+            )
+        );
+    });
 
-    const caminho = midia.path.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!midia) return null;
+
+    const caminhoOriginal =
+        midia.url ||
+        midia.path ||
+        midia.caminho ||
+        midia.arquivo ||
+        midia.nomeArquivo;
+
+    if (!caminhoOriginal) return null;
+
+    const caminho = String(caminhoOriginal)
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "");
 
     if (/^https?:\/\//i.test(caminho)) {
         return caminho;
     }
 
-    return `${apiUrl}/${caminho}`;
+    const supabaseUrl =
+        "https://hepwnbumziimvfugvjbe.supabase.co";
+
+    const caminhoLimpo = caminho.replace(/^midias\//, "");
+
+    return `${supabaseUrl}/storage/v1/object/public/midias/${caminhoLimpo}`;
 }
 
-function obterResumo(noticia) {
-    return noticia.subtitulo || noticia.texto || "";
-}
+    function obterResumo(noticia) {
+        return noticia.subtitulo || noticia.texto || "";
+    }
 
-function limitarTexto(texto, limite = 180) {
-    const valor = String(texto || "");
+    function limitarTexto(texto, limite = 180) {
+        const valor = String(texto || "");
 
-    return valor.length > limite
-        ? `${valor.slice(0, limite).trim()}...`
-        : valor;
-}
+        return valor.length > limite
+            ? `${valor.slice(0, limite).trim()}...`
+            : valor;
+    }
 
-function obterAutor(noticia) {
-    return noticia.autor?.nome || "Jornal Online";
-}
-
-async function requisicao(caminho, opcoes = {}) {
-    const resposta = await fetch(`${apiUrl}${caminho}`, {
-        ...opcoes,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(opcoes.headers || {})
-        }
-    });
-
-    const dados = await resposta.json().catch(() => ({}));
-
-    if (!resposta.ok) {
-        throw new Error(
-            dados.mensagem ||
-            dados.erro ||
-            dados.error ||
-            "Não foi possível realizar a operação."
+    function obterAutor(noticia) {
+        return (
+            noticia.autor?.nome ||
+            noticia.usuario?.nome ||
+            "Jornal Online"
         );
     }
 
-    return dados;
-}
+    async function requisicao(caminho, opcoes = {}) {
+        let resposta;
 
-function fecharModal() {
-    modal.classList.remove("ativo");
-    modal.setAttribute("aria-hidden", "true");
-    document.body.style.overflow = "";
-}
+        try {
+            resposta = await fetch(`${apiUrl}${caminho}`, {
+                ...opcoes,
+                headers: {
+                    ...(token
+                        ? { Authorization: `Bearer ${token}` }
+                        : {}),
+                    ...(opcoes.headers || {})
+                }
+            });
+        } catch {
+            throw new Error(
+                "Não foi possível conectar ao servidor."
+            );
+        }
 
-fechar.addEventListener("click", fecharModal);
+        const dados = await resposta.json().catch(() => ({}));
 
-modal.addEventListener("click", event => {
-    if (event.target === modal) fecharModal();
-});
+        if (!resposta.ok) {
+            throw new Error(
+                dados.mensagem ||
+                dados.erro ||
+                dados.error ||
+                `Erro ${resposta.status}: não foi possível realizar a operação.`
+            );
+        }
 
-document.addEventListener("keydown", event => {
-    if (event.key === "Escape") fecharModal();
-});
-
-function abrirModal(noticia) {
-    if (!noticia) return;
-
-    const imagemModal = modal.querySelector(".imagem-modal");
-    const categoriaModal = modal.querySelector(".modal-body .categoria");
-    const tituloModal = modal.querySelector(".modal-body h2");
-    const subtituloModal = modal.querySelector(".subtitulo-modal");
-    const autorModal = modal.querySelector(".modal-body .autor");
-    const textoModal = modal.querySelector(".texto-noticia");
-
-    const imagem = obterImagem(noticia);
-
-    imagemModal.hidden = !imagem;
-
-    if (imagem) {
-        imagemModal.src = imagem;
-        imagemModal.alt = noticia.titulo;
-    } else {
-        imagemModal.removeAttribute("src");
+        return dados;
     }
 
-    categoriaModal.textContent = "NOTÍCIA";
-    tituloModal.textContent = noticia.titulo;
-    subtituloModal.textContent = noticia.subtitulo || "";
-    subtituloModal.hidden = !noticia.subtitulo;
+    function fecharModal() {
+        if (!modal) return;
 
-    autorModal.innerHTML = `
-        <i class="fa-solid fa-user"></i>
-        ${escaparHtml(obterAutor(noticia))}
-        •
-        ${escaparHtml(formatarData(noticia.dataPublicacao))}
-    `;
-
-    textoModal.textContent = noticia.texto || "";
-
-    modal.classList.add("ativo");
-    modal.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
-    fechar.focus();
-}
-
-function atualizarCarrossel(direcao = 1) {
-    const destaques = noticiasDoBanner();
-
-    if (destaques.length === 0) {
-        tituloBanner.textContent = "Nenhuma notícia publicada";
-        descricaoBanner.textContent = "As notícias publicadas aparecerão aqui.";
-        categoriaBanner.textContent = "JORNAL ONLINE";
-
-        trocarSlide(noticia);
-        return;
+        modal.classList.remove("ativo");
+        modal.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
     }
 
-    if (indiceAtual >= destaques.length) {
-        indiceAtual = 0;
-    }
+    function abrirModal(noticia) {
+        if (!noticia || !modal) return;
 
-    const noticia = destaques[indiceAtual];
+        const imagemModal = modal.querySelector(".imagem-modal");
+        const categoriaModal = modal.querySelector(".modal-body .categoria");
+        const tituloModal = modal.querySelector(".modal-body h2");
+        const subtituloModal = modal.querySelector(".subtitulo-modal");
+        const autorModal = modal.querySelector(".modal-body .autor");
+        const textoModal = modal.querySelector(".texto-noticia");
 
-    tituloBanner.textContent = noticia.titulo;
-    descricaoBanner.textContent = limitarTexto(obterResumo(noticia), 180);
-    categoriaBanner.textContent = "DESTAQUE";
+        const imagem = obterImagem(noticia);
 
-    const imagem = obterImagem(noticia) || "../img/banner-padrao.png";
+        if (imagemModal) {
+            imagemModal.hidden = !imagem;
 
-    trocarSlide(noticia, direcao);
-}
+            if (imagem) {
+                imagemModal.src = imagem;
+                imagemModal.alt = noticia.titulo || "Imagem da notícia";
+            } else {
+                imagemModal.removeAttribute("src");
+            }
+        }
 
-function proximaNoticia() {
-    const total = noticiasDoBanner().length;
-    if (!total || animandoCarrossel) return;
+        if (categoriaModal) {
+            categoriaModal.textContent = "NOTÍCIA";
+        }
 
-    indiceAtual = (indiceAtual + 1) % total;
-    atualizarCarrossel(1);
-}
+        if (tituloModal) {
+            tituloModal.textContent = noticia.titulo || "";
+        }
 
-function noticiaAnterior() {
-    const total = noticiasDoBanner().length;
-    if (!total || animandoCarrossel) return;
+        if (subtituloModal) {
+            subtituloModal.textContent = noticia.subtitulo || "";
+            subtituloModal.hidden = !noticia.subtitulo;
+        }
 
-    indiceAtual = (indiceAtual - 1 + total) % total;
-    atualizarCarrossel(-1);
-}
-
-botaoProximo.addEventListener("click", proximaNoticia);
-botaoAnterior.addEventListener("click", noticiaAnterior);
-
-setInterval(proximaNoticia, 6000);
-
-botaoLerMais.addEventListener("click", () => {
-    const noticia = noticiasDoBanner()[indiceAtual];
-
-    if (noticia) {
-        abrirModal(noticia);
-    }
-});
-
-function criarCard(noticia) {
-    const card = document.createElement("article");
-    card.classList.add("card");
-
-    const imagem = obterImagem(noticia);
-
-    const imagemHtml = imagem
-        ? `<img src="${escaparHtml(imagem)}" alt="${escaparHtml(noticia.titulo)}" loading="lazy">`
-        : `
-            <div class="card-imagem-vazia">
-                <i class="fa-regular fa-image"></i>
-            </div>
-        `;
-
-    const botoesGerenciamento = podeGerenciar(noticia)
-        ? `
-            <a class="editar" href="/html/criar.html?id=${noticia.id}">
-                <i class="fa-solid fa-pen"></i>
-                Editar
-            </a>
-            <button class="excluir" type="button">
-                <i class="fa-solid fa-trash"></i>
-                Excluir
-            </button>
-        `
-        : "";
-
-    card.innerHTML = `
-        ${imagemHtml}
-        <div class="card-body">
-            <span class="categoria">NOTÍCIA</span>
-            <h3>${escaparHtml(noticia.titulo)}</h3>
-            <p>${escaparHtml(limitarTexto(obterResumo(noticia)))}</p>
-            <p class="autor-card">
+        if (autorModal) {
+            autorModal.innerHTML = `
                 <i class="fa-solid fa-user"></i>
                 ${escaparHtml(obterAutor(noticia))}
                 •
                 ${escaparHtml(formatarData(noticia.dataPublicacao))}
-            </p>
-            <div class="buttons">
-                <button class="visualizar" type="button">
-                    <i class="fa-solid fa-eye"></i>
-                    Visualizar
-                </button>
-                ${botoesGerenciamento}
-            </div>
-        </div>
-    `;
+            `;
+        }
 
-    card.querySelector(".visualizar").addEventListener("click", () => {
-        abrirModal(noticia);
-    });
+        if (textoModal) {
+            textoModal.textContent = noticia.texto || "";
+        }
 
-    const excluir = card.querySelector(".excluir");
+        modal.classList.add("ativo");
+        modal.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
 
-    if (excluir) {
-        excluir.addEventListener("click", () => excluirNoticia(noticia));
+        fechar?.focus();
     }
 
-    return card;
-}
+    function criarSlide(imagem) {
+        const slide = document.createElement("div");
 
-function carregarNoticias() {
-    cardsContainer.replaceChildren();
+        slide.className = "banner-slide";
 
-    const termo = pesquisa.value.toLocaleLowerCase("pt-BR").trim();
+        const imagemSegura = String(imagem)
+            .replace(/["\\\n\r]/g, "");
 
-    const noticiasFiltradas = noticias.filter(noticia => {
-        const conteudoPesquisa = [
-            noticia.titulo,
-            noticia.subtitulo,
-            noticia.texto,
-            obterAutor(noticia)
-        ].join(" ").toLocaleLowerCase("pt-BR");
+        slide.style.backgroundImage = `
+            linear-gradient(
+                90deg,
+                rgba(35, 35, 35, 0.95) 0%,
+                rgba(75, 75, 75, 0.70) 40%,
+                rgba(130, 130, 130, 0.10) 100%
+            ),
+            url("${imagemSegura}")
+        `;
 
-        return conteudoPesquisa.includes(termo);
-    });
-
-    if (!noticiasFiltradas.length) {
-        const mensagem = document.createElement("div");
-        mensagem.className = "estado-noticias";
-        mensagem.textContent = noticias.length
-            ? "Nenhuma notícia encontrada."
-            : "Nenhuma notícia publicada.";
-        cardsContainer.appendChild(mensagem);
-        return;
+        return slide;
     }
 
-    noticiasFiltradas.forEach(noticia => {
-        cardsContainer.appendChild(criarCard(noticia));
-    });
-}
+    function trocarSlide(noticia, direcao = 1) {
+        if (!banner || animandoCarrossel) return;
 
-async function excluirNoticia(noticia) {
-    if (!podeGerenciar(noticia)) return;
+        const imagem = noticia
+            ? obterImagem(noticia) || "/img/banner-padrao.png"
+            : "/img/banner-padrao.png";
 
-    const confirmar = confirm("Deseja realmente excluir esta notícia?");
+        const novoSlide = criarSlide(imagem);
 
-    if (!confirmar) return;
+        if (!slideAtual) {
+            banner.style.backgroundImage = "none";
+            banner.prepend(novoSlide);
+            slideAtual = novoSlide;
+            return;
+        }
 
-    try {
-        await requisicao(`/noticias/excluir/${noticia.id}`, {
-            method: "DELETE"
+        animandoCarrossel = true;
+
+        novoSlide.style.transform =
+            `translateX(${direcao * 100}%)`;
+
+        banner.prepend(novoSlide);
+
+        const slideAnterior = slideAtual;
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                novoSlide.style.transform = "translateX(0)";
+                slideAnterior.style.transform =
+                    `translateX(${-direcao * 100}%)`;
+            });
         });
 
-        noticias = noticias.filter(item => item.id !== noticia.id);
+        setTimeout(() => {
+            slideAnterior.remove();
+            slideAtual = novoSlide;
+            animandoCarrossel = false;
+        }, 650);
+    }
 
-        if (indiceAtual >= noticias.length) {
+    function atualizarCarrossel(direcao = 1) {
+        const destaques = noticiasDoBanner();
+
+        if (!destaques.length) {
+            if (tituloBanner) {
+                tituloBanner.textContent = "Nenhuma notícia publicada";
+            }
+
+            if (descricaoBanner) {
+                descricaoBanner.textContent =
+                    "As notícias publicadas aparecerão aqui.";
+            }
+
+            if (categoriaBanner) {
+                categoriaBanner.textContent = "JORNAL ONLINE";
+            }
+
+            if (botaoLerMais) {
+                botaoLerMais.disabled = true;
+            }
+
+            if (slideAtual) {
+                slideAtual.remove();
+                slideAtual = null;
+            }
+
+            if (banner) {
+                banner.style.backgroundImage = `
+                    linear-gradient(
+                        90deg,
+                        rgba(35, 35, 35, 0.95),
+                        rgba(75, 75, 75, 0.70)
+                    ),
+                    url("/img/banner-padrao.png")
+                `;
+            }
+
+            return;
+        }
+
+        if (indiceAtual >= destaques.length) {
             indiceAtual = 0;
         }
 
-        carregarNoticias();
-        atualizarCarrossel();
-    } catch (erro) {
-        alert(erro.message);
+        if (indiceAtual < 0) {
+            indiceAtual = destaques.length - 1;
+        }
+
+        const noticia = destaques[indiceAtual];
+
+        if (tituloBanner) {
+            tituloBanner.textContent = noticia.titulo || "";
+        }
+
+        if (descricaoBanner) {
+            descricaoBanner.textContent = limitarTexto(
+                obterResumo(noticia),
+                180
+            );
+        }
+
+        if (categoriaBanner) {
+            categoriaBanner.textContent = "DESTAQUE";
+        }
+
+        if (botaoLerMais) {
+            botaoLerMais.disabled = false;
+        }
+
+        trocarSlide(noticia, direcao);
     }
-}
 
-async function buscarNoticias() {
-    cardsContainer.innerHTML = `
-        <div class="estado-noticias">
-            Carregando notícias...
-        </div>
-    `;
+    function proximaNoticia() {
+        const total = noticiasDoBanner().length;
 
-    try {
-        if (!token) {
-            throw new Error("Faça login para visualizar as notícias.");
-        }
+        if (total <= 1 || animandoCarrossel) return;
 
-        const dados = await requisicao("/noticias/listar");
+        indiceAtual = (indiceAtual + 1) % total;
 
-        if (Array.isArray(dados)) {
-            noticias = dados;
-        } else if (Array.isArray(dados.noticias)) {
-            noticias = dados.noticias;
-        } else {
-            throw new Error("Formato de resposta inesperado ao listar notícias.");
-        }
+        atualizarCarrossel(1);
+    }
 
-        noticias.sort((a, b) =>
-            new Date(b.dataPublicacao) - new Date(a.dataPublicacao)
+    function noticiaAnterior() {
+        const total = noticiasDoBanner().length;
+
+        if (total <= 1 || animandoCarrossel) return;
+
+        indiceAtual = (indiceAtual - 1 + total) % total;
+
+        atualizarCarrossel(-1);
+    }
+
+    function criarCard(noticia) {
+        const card = document.createElement("article");
+
+        card.classList.add("card");
+
+        const imagem = obterImagem(noticia);
+
+        const imagemHtml = imagem
+            ? `
+                <img
+                    src="${escaparHtml(imagem)}"
+                    alt="${escaparHtml(noticia.titulo)}"
+                    loading="lazy"
+                >
+            `
+            : `
+                <div class="card-imagem-vazia">
+                    <i class="fa-regular fa-image"></i>
+                </div>
+            `;
+
+        const botoesGerenciamento = podeGerenciar(noticia)
+            ? `
+                <a class="editar"
+                   href="/html/criar.html?id=${encodeURIComponent(noticia.id)}">
+                    <i class="fa-solid fa-pen"></i>
+                    Editar
+                </a>
+
+                <button class="excluir" type="button">
+                    <i class="fa-solid fa-trash"></i>
+                    Excluir
+                </button>
+            `
+            : "";
+
+        card.innerHTML = `
+            ${imagemHtml}
+
+            <div class="card-body">
+                <span class="categoria">NOTÍCIA</span>
+
+                <h3>${escaparHtml(noticia.titulo)}</h3>
+
+                <p>
+                    ${escaparHtml(limitarTexto(obterResumo(noticia)))}
+                </p>
+
+                <p class="autor-card">
+                    <i class="fa-solid fa-user"></i>
+                    ${escaparHtml(obterAutor(noticia))}
+                    •
+                    ${escaparHtml(formatarData(noticia.dataPublicacao))}
+                </p>
+
+                <div class="buttons">
+                    <button class="visualizar" type="button">
+                        <i class="fa-solid fa-eye"></i>
+                        Visualizar
+                    </button>
+
+                    ${botoesGerenciamento}
+                </div>
+            </div>
+        `;
+
+        card.querySelector(".visualizar")?.addEventListener(
+            "click",
+            () => abrirModal(noticia)
         );
 
-        indiceAtual = 0;
-        carregarNoticias();
-        atualizarCarrossel();
-    } catch (erro) {
+        card.querySelector(".excluir")?.addEventListener(
+            "click",
+            () => excluirNoticia(noticia)
+        );
+
+        return card;
+    }
+
+    function carregarNoticias() {
+        if (!cardsContainer) return;
+
         cardsContainer.replaceChildren();
 
-        const mensagem = document.createElement("div");
-        mensagem.className = "estado-noticias";
-        mensagem.textContent = erro.message;
+        const termo = (pesquisa?.value || "")
+            .toLocaleLowerCase("pt-BR")
+            .trim();
 
-        cardsContainer.appendChild(mensagem);
+        const noticiasFiltradas = noticias.filter(noticia => {
+            const conteudoPesquisa = [
+                noticia.titulo,
+                noticia.subtitulo,
+                noticia.texto,
+                obterAutor(noticia)
+            ].join(" ").toLocaleLowerCase("pt-BR");
 
-        tituloBanner.textContent = "Notícias indisponíveis";
-        descricaoBanner.textContent = "Não foi possível carregar as notícias.";
-    }
-}
-
-pesquisa.addEventListener("input", carregarNoticias);
-
-buscarNoticias();
-
-let slideAtual = null;
-let animandoCarrossel = false;
-
-function criarSlide(imagem) {
-    const slide = document.createElement("div");
-    slide.className = "banner-slide";
-
-    slide.style.backgroundImage = `
-        linear-gradient(
-            90deg,
-            rgba(35, 35, 35, 0.95) 0%,
-            rgba(75, 75, 75, 0.70) 40%,
-            rgba(130, 130, 130, 0.10) 100%
-        ),
-        url("${imagem.replace(/["\\\n\r]/g, "")}")
-    `;
-
-    return slide;
-}
-
-function trocarSlide(noticia, direcao = 1) {
-    if (animandoCarrossel) return;
-
-    const imagem = obterImagem(noticia) || "../img/banner-padrao.png";
-    const novoSlide = criarSlide(imagem);
-
-    if (!slideAtual) {
-        banner.style.backgroundImage = "none";
-        banner.prepend(novoSlide);
-        slideAtual = novoSlide;
-        return;
-    }
-
-    animandoCarrossel = true;
-
-    novoSlide.style.transform = `translateX(${direcao * 100}%)`;
-    banner.prepend(novoSlide);
-
-    const slideAnterior = slideAtual;
-
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            novoSlide.style.transform = "translateX(0)";
-            slideAnterior.style.transform = `translateX(${-direcao * 100}%)`;
+            return conteudoPesquisa.includes(termo);
         });
+
+        if (!noticiasFiltradas.length) {
+            const mensagem = document.createElement("div");
+
+            mensagem.className = "estado-noticias";
+
+            mensagem.textContent = noticias.length
+                ? "Nenhuma notícia encontrada."
+                : "Nenhuma notícia publicada.";
+
+            cardsContainer.appendChild(mensagem);
+            return;
+        }
+
+        noticiasFiltradas.forEach(noticia => {
+            cardsContainer.appendChild(criarCard(noticia));
+        });
+    }
+
+    async function excluirNoticia(noticia) {
+        if (!podeGerenciar(noticia)) return;
+
+        const confirmar = confirm(
+            "Deseja realmente excluir esta notícia?"
+        );
+
+        if (!confirmar) return;
+
+        try {
+            await requisicao(
+                `/noticias/excluir/${noticia.id}`,
+                {
+                    method: "DELETE"
+                }
+            );
+
+            noticias = noticias.filter(
+                item => Number(item.id) !== Number(noticia.id)
+            );
+
+            if (indiceAtual >= noticias.length) {
+                indiceAtual = 0;
+            }
+
+            carregarNoticias();
+            atualizarCarrossel();
+        } catch (erro) {
+            console.error("Erro ao excluir notícia:", erro);
+            alert(erro.message);
+        }
+    }
+
+    async function buscarNoticias() {
+        if (!cardsContainer) return;
+
+        cardsContainer.innerHTML = `
+            <div class="estado-noticias">
+                Carregando notícias...
+            </div>
+        `;
+
+        try {
+            if (!usuarioAtual) {
+                throw new Error(
+                    "Faça login para visualizar as notícias."
+                );
+            }
+
+            const dados = await requisicao("/noticias/listar");
+
+            if (Array.isArray(dados)) {
+                noticias = dados;
+            } else if (Array.isArray(dados.noticias)) {
+                noticias = dados.noticias;
+            } else {
+                throw new Error(
+                    "Formato de resposta inesperado ao listar notícias."
+                );
+            }
+
+            noticias.sort((a, b) =>
+                new Date(b.dataPublicacao) -
+                new Date(a.dataPublicacao)
+            );
+
+            indiceAtual = 0;
+
+            carregarNoticias();
+            atualizarCarrossel();
+        } catch (erro) {
+            console.error("Erro ao buscar notícias:", erro);
+
+            cardsContainer.replaceChildren();
+
+            const mensagem = document.createElement("div");
+
+            mensagem.className = "estado-noticias";
+            mensagem.textContent = erro.message;
+
+            cardsContainer.appendChild(mensagem);
+
+            if (tituloBanner) {
+                tituloBanner.textContent = "Notícias indisponíveis";
+            }
+
+            if (descricaoBanner) {
+                descricaoBanner.textContent =
+                    "Não foi possível carregar as notícias.";
+            }
+
+            if (botaoLerMais) {
+                botaoLerMais.disabled = true;
+            }
+        }
+    }
+
+    fechar?.addEventListener("click", fecharModal);
+
+    modal?.addEventListener("click", evento => {
+        if (evento.target === modal) {
+            fecharModal();
+        }
     });
 
-    setTimeout(() => {
-        slideAnterior.remove();
-        slideAtual = novoSlide;
-        animandoCarrossel = false;
-    }, 650);
-}
+    document.addEventListener("keydown", evento => {
+        if (evento.key === "Escape") {
+            fecharModal();
+        }
+    });
+
+    botaoProximo?.addEventListener(
+        "click",
+        proximaNoticia
+    );
+
+    botaoAnterior?.addEventListener(
+        "click",
+        noticiaAnterior
+    );
+
+    botaoLerMais?.addEventListener("click", () => {
+        const noticia = noticiasDoBanner()[indiceAtual];
+
+        if (noticia) {
+            abrirModal(noticia);
+        }
+    });
+
+    pesquisa?.addEventListener(
+        "input",
+        carregarNoticias
+    );
+
+    intervaloCarrossel = setInterval(
+        proximaNoticia,
+        6000
+    );
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            clearInterval(intervaloCarrossel);
+            intervaloCarrossel = null;
+        } else if (!intervaloCarrossel) {
+            intervaloCarrossel = setInterval(
+                proximaNoticia,
+                6000
+            );
+        }
+    });
+
+    buscarNoticias();
+})();

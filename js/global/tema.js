@@ -1,5 +1,6 @@
 
-const API_URL = "http://localhost:3000";
+var API_URL = "https://jornalvirtual-git-main-biaams-sys1.vercel.app";
+
 const root = document.documentElement;
 
 const temas = {

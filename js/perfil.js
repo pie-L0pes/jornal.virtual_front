@@ -34,6 +34,8 @@ let abaAtualPerfil = "publicacoes";
 let erroCurtidasPerfil = false;
 let erroAtividadesPerfil = false;
 let carregandoAtividadesPerfil = true;
+let carregandoCurtidasPerfil = true;
+let geracaoPerfil = 0;
 
 function obterTokenPerfil() {
     return localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -46,7 +48,6 @@ function obterUsuarioToken() {
 
     try {
         const partes = token.split(".");
-
         if (partes.length !== 3) return null;
 
         const payload = partes[1]
@@ -103,18 +104,51 @@ function perfilProprio() {
     );
 }
 
-function obterCaminhoImagem(caminho, padrao) {
-    if (!caminho || typeof caminho !== "string") return padrao;
 
-    if (/^https?:\/\//i.test(caminho)) {
-        return caminho;
+function obterCaminhoImagem(caminho, padrao, atualizar = false) {
+    if (!caminho || typeof caminho !== "string") {
+        return padrao;
     }
 
-    const base = String(API_URL).replace(/\/+$/, "");
-    const arquivo = caminho.replace(/^\/+/, "");
+    let url = caminho.trim().replace(/\\/g, "/");
 
-    return `${base}/${arquivo}`;
+    if (!url) return padrao;
+
+    if (!/^(https?:\/\/|data:|blob:)/i.test(url)) {
+        const supabaseUrl =
+            "https://hepwnbumziimvfugvjbe.supabase.co";
+
+        const caminhoLimpo = url
+            .replace(/^\/+/, "")
+            .replace(/^midias\//, "");
+
+        if (
+            caminhoLimpo.startsWith("perfil/") ||
+            caminhoLimpo.startsWith("perfis/") ||
+            caminhoLimpo.startsWith("usuarios/") ||
+            caminhoLimpo.startsWith("template/") ||
+            caminhoLimpo.startsWith("templates/")
+        ) {
+            url = `${supabaseUrl}/storage/v1/object/public/midias/${caminhoLimpo}`;
+        } else {
+            const base = String(API_URL).replace(/\/+$/, "");
+            url = `${base}/${caminhoLimpo}`;
+        }
+    }
+
+    if (!atualizar || /^(data:|blob:)/i.test(url)) {
+        return url;
+    }
+
+    try {
+        const endereco = new URL(url, window.location.href);
+        endereco.searchParams.set("v", String(Date.now()));
+        return endereco.href;
+    } catch {
+        return url;
+    }
 }
+
 
 function formatarTipo(tipo) {
     const tipos = {
@@ -261,25 +295,36 @@ async function carregarPerfil() {
         rede.textContent =
             dados.empresa?.nome || "Não informado";
 
-        foto.src = obterCaminhoImagem(
+
+        console.log("Foto retornada pela API:", dados.fotoPerfil);
+        console.log("Banner retornado pela API:", dados.template);
+
+        const urlFoto = obterCaminhoImagem(
             dados.fotoPerfil,
-            FOTO_PADRAO
+            FOTO_PADRAO,
+            true
         );
 
-        banner.src = obterCaminhoImagem(
+        const urlBanner = obterCaminhoImagem(
             dados.template,
-            TEMPLATE_PADRAO
+            TEMPLATE_PADRAO,
+            true
         );
 
         foto.onerror = () => {
+            console.error("Não foi possível carregar a foto:", foto.src);
             foto.onerror = null;
             foto.src = FOTO_PADRAO;
         };
 
         banner.onerror = () => {
+            console.error("Não foi possível carregar o banner:", banner.src);
             banner.onerror = null;
             banner.src = TEMPLATE_PADRAO;
         };
+
+        foto.src = urlFoto;
+        banner.src = urlBanner;
 
         const botaoEditar = document.getElementById("btnEditarPerfil");
 
@@ -297,14 +342,18 @@ async function carregarPerfil() {
             prepararModal();
         }
 
-        await carregarEstatisticas(perfilId, token);
+        carregarEstatisticas(perfilId, token).catch(erro => {
+            console.error("Erro ao carregar estatísticas:", erro);
+        });
 
     } catch (erro) {
         console.error("Erro ao carregar perfil:", erro);
 
         nome.textContent = "Não foi possível carregar";
+
         descricao.textContent =
             "Não foi possível carregar os dados do perfil.";
+
         categoria.textContent = "Usuário";
         rede.textContent = "Não informado";
 
@@ -314,10 +363,20 @@ async function carregarPerfil() {
 }
 
 async function carregarEstatisticas(usuarioId, token) {
+    const geracao = ++geracaoPerfil;
+
     erroAtividadesPerfil = false;
+    erroCurtidasPerfil = false;
     carregandoAtividadesPerfil = true;
+    carregandoCurtidasPerfil = true;
 
     renderizarAtividadesPerfil();
+
+    const promessaCurtidas = carregarCurtidasPerfil(
+        usuarioId,
+        token,
+        geracao
+    );
 
     try {
         const resposta = await fetch(
@@ -330,13 +389,15 @@ async function carregarEstatisticas(usuarioId, token) {
             }
         );
 
-        const dados = await resposta.json();
+        const dados = await resposta.json().catch(() => ({}));
 
         if (!resposta.ok) {
             throw new Error(
-                dados.mensagem || "Erro ao carregar atividades."
+                dados.mensagem || `Erro HTTP ${resposta.status}`
             );
         }
+
+        if (geracao !== geracaoPerfil) return;
 
         const publicacoes = obterListaPublicacoes(dados);
 
@@ -371,30 +432,106 @@ async function carregarEstatisticas(usuarioId, token) {
             );
         });
 
-        totalPublicacoes.textContent = publicacoesPerfil.length;
-        totalComentarios.textContent = comentariosPerfil.length;
+        if (totalPublicacoes) {
+            totalPublicacoes.textContent = publicacoesPerfil.length;
+        }
+
+        if (totalComentarios) {
+            totalComentarios.textContent = comentariosPerfil.length;
+        }
+
+        carregandoAtividadesPerfil = false;
+        renderizarAtividadesPerfil();
+
+        await promessaCurtidas;
+
+        if (geracao !== geracaoPerfil) return;
+
+        if (erroCurtidasPerfil && !curtidasPrivadas) {
+            const temDadosCurtidas = publicacoes.some(publicacao =>
+                Array.isArray(publicacao.curtidas)
+            );
+
+            if (temDadosCurtidas) {
+                const curtidasEncontradas = [];
+
+                publicacoes.forEach(publicacao => {
+                    const curtidas = Array.isArray(publicacao.curtidas)
+                        ? publicacao.curtidas
+                        : [];
+
+                    curtidas.forEach(curtida => {
+                        const id = Number(
+                            curtida?.usuarioId ??
+                            curtida?.usuario?.id ??
+                            curtida?.autor?.id
+                        );
+
+                        if (id === Number(usuarioId)) {
+                            curtidasEncontradas.push({
+                                publicacao
+                            });
+                        }
+                    });
+                });
+
+                curtidasPerfil = curtidasEncontradas;
+                erroCurtidasPerfil = false;
+
+                if (totalCurtidas) {
+                    totalCurtidas.textContent = curtidasPerfil.length;
+                }
+            }
+        }
 
     } catch (erro) {
+        if (geracao !== geracaoPerfil) return;
+
         console.error("Erro ao carregar atividades:", erro);
 
         erroAtividadesPerfil = true;
         publicacoesPerfil = [];
         comentariosPerfil = [];
 
-        totalPublicacoes.textContent = "—";
-        totalComentarios.textContent = "—";
+        if (totalPublicacoes) {
+            totalPublicacoes.textContent = "—";
+        }
+
+        if (totalComentarios) {
+            totalComentarios.textContent = "—";
+        }
+
+        await promessaCurtidas;
+
+    } finally {
+        if (geracao === geracaoPerfil) {
+            carregandoAtividadesPerfil = false;
+            carregandoCurtidasPerfil = false;
+            renderizarAtividadesPerfil();
+        }
     }
-
-    await carregarCurtidasPerfil(usuarioId, token);
-
-    carregandoAtividadesPerfil = false;
-    renderizarAtividadesPerfil();
 }
 
-async function carregarCurtidasPerfil(usuarioId, token) {
+async function carregarCurtidasPerfil(
+    usuarioId,
+    token,
+    geracao = geracaoPerfil
+) {
+    if (geracao !== geracaoPerfil) return;
+
     curtidasPerfil = [];
     curtidasPrivadas = false;
     erroCurtidasPerfil = false;
+
+    if (!perfilProprio() && !mostrarCurtidasPerfil) {
+        curtidasPrivadas = true;
+
+        if (totalCurtidas) {
+            totalCurtidas.textContent = "—";
+        }
+
+        return;
+    }
 
     try {
         const resposta = await fetch(
@@ -407,52 +544,81 @@ async function carregarCurtidasPerfil(usuarioId, token) {
             }
         );
 
+        if (geracao !== geracaoPerfil) return;
+
         if (resposta.status === 403) {
             curtidasPrivadas = true;
-            totalCurtidas.textContent = "—";
+
+            if (totalCurtidas) {
+                totalCurtidas.textContent = "—";
+            }
+
             return;
         }
 
-        const dados = await resposta.json();
+        if (resposta.status === 404) {
+            erroCurtidasPerfil = true;
+
+            if (totalCurtidas) {
+                totalCurtidas.textContent = "—";
+            }
+
+            return;
+        }
+
+        const dados = await resposta.json().catch(() => ({}));
 
         if (!resposta.ok) {
             throw new Error(
-                dados.mensagem || "Erro ao carregar curtidas."
+                dados.mensagem || `Erro HTTP ${resposta.status}`
             );
         }
 
-        console.log("Resposta da API de curtidas:", dados);
+        if (geracao !== geracaoPerfil) return;
 
-        const lista = obterListaCurtidas(dados);
-
-        curtidasPerfil = lista
+        curtidasPerfil = obterListaCurtidas(dados)
             .map(normalizarCurtida)
             .filter(Boolean);
 
-        totalCurtidas.textContent = curtidasPerfil.length;
+        if (totalCurtidas) {
+            totalCurtidas.textContent = curtidasPerfil.length;
+        }
 
     } catch (erro) {
+        if (geracao !== geracaoPerfil) return;
+
         console.error("Erro ao carregar curtidas:", erro);
 
         erroCurtidasPerfil = true;
-        totalCurtidas.textContent = "—";
+
+        if (totalCurtidas) {
+            totalCurtidas.textContent = "—";
+        }
     }
 }
 
+
 function prepararModal() {
     if (inputNome) {
-        inputNome.value = nome.textContent;
+        inputNome.value = nome?.textContent || "";
         inputNome.disabled = true;
     }
 
-    inputDescricao.value =
-        descricao.textContent !==
-        "Este usuário ainda não adicionou uma descrição."
-            ? descricao.textContent
-            : "";
+    if (inputDescricao) {
+        inputDescricao.value =
+            descricao?.textContent !==
+                "Este usuário ainda não adicionou uma descrição."
+                ? descricao?.textContent || ""
+                : "";
+    }
 
-    previewFoto.src = foto.src;
-    previewBanner.src = banner.src;
+    if (previewFoto && foto) {
+        previewFoto.src = foto.src;
+    }
+
+    if (previewBanner && banner) {
+        previewBanner.src = banner.src;
+    }
 
     if (inputMostrarCurtidas) {
         inputMostrarCurtidas.checked = mostrarCurtidasPerfil;
@@ -471,14 +637,21 @@ function fecharModal() {
 
     modal.style.display = "none";
 
-    inputFoto.value = "";
-    inputBanner.value = "";
+    if (inputFoto) {
+        inputFoto.value = "";
+    }
+
+    if (inputBanner) {
+        inputBanner.value = "";
+    }
 
     prepararModal();
 }
 
 function mostrarPreview(input, preview) {
-    const arquivo = input.files[0];
+    if (!input || !preview) return;
+
+    const arquivo = input.files?.[0];
 
     if (!arquivo) return;
 
@@ -503,6 +676,36 @@ if (inputBanner) {
     });
 }
 
+async function enviarAtualizacaoPerfil(rota, metodo, dados, token) {
+    const headers = {
+        Authorization: `Bearer ${token}`
+    };
+
+    if (!(dados instanceof FormData)) {
+        headers["Content-Type"] = "application/json";
+    }
+
+    const resposta = await fetch(`${API_URL}${rota}`, {
+        method: metodo,
+        headers,
+        body: dados instanceof FormData
+            ? dados
+            : JSON.stringify(dados)
+    });
+
+    const resultado = await resposta.json().catch(() => ({}));
+
+    if (!resposta.ok) {
+        throw new Error(
+            resultado.mensagem ||
+            resultado.erro ||
+            `Erro HTTP ${resposta.status}`
+        );
+    }
+
+    return resultado;
+}
+
 async function salvarPerfil() {
     if (!perfilProprio()) return;
 
@@ -515,9 +718,9 @@ async function salvarPerfil() {
         return;
     }
 
-    const descricaoNova = inputDescricao.value.trim();
-    const fotoNova = inputFoto.files[0];
-    const bannerNovo = inputBanner.files[0];
+    const descricaoNova = inputDescricao?.value.trim() || "";
+    const fotoNova = inputFoto?.files?.[0] || null;
+    const bannerNovo = inputBanner?.files?.[0] || null;
 
     const privacidadeNova = inputMostrarCurtidas
         ? inputMostrarCurtidas.checked
@@ -527,15 +730,17 @@ async function salvarPerfil() {
         privacidadeNova !== mostrarCurtidasPerfil;
 
     const descricaoAtual =
-        descricao.textContent ===
-        "Este usuário ainda não adicionou uma descrição."
+        descricao?.textContent ===
+            "Este usuário ainda não adicionou uma descrição."
             ? ""
-            : descricao.textContent;
+            : descricao?.textContent || "";
+
+    const alterouDescricao = descricaoNova !== descricaoAtual;
 
     if (
         !fotoNova &&
         !bannerNovo &&
-        descricaoNova === descricaoAtual &&
+        !alterouDescricao &&
         !alterouPrivacidade
     ) {
         alert("Nenhuma alteração foi realizada.");
@@ -544,125 +749,122 @@ async function salvarPerfil() {
 
     const botaoSalvar = document.querySelector(".botao-salvar");
 
+    if (botaoSalvar?.disabled) return;
+
     if (botaoSalvar) {
         botaoSalvar.disabled = true;
         botaoSalvar.textContent = "Salvando...";
     }
 
+    let algumaAlteracaoSalva = false;
+
     try {
-        if (descricaoNova !== descricaoAtual) {
-            const respostaDescricao = await fetch(
-                `${API_URL}/usuarios/atualizar/${usuarioToken.id}`,
+        if (alterouDescricao) {
+            await enviarAtualizacaoPerfil(
+                `/usuarios/atualizar/${usuarioToken.id}`,
+                "PUT",
                 {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        bio: descricaoNova
-                    })
-                }
+                    bio: descricaoNova
+                },
+                token
             );
 
-            const dadosDescricao = await respostaDescricao.json();
-
-            if (!respostaDescricao.ok) {
-                throw new Error(
-                    dadosDescricao.mensagem ||
-                    "Erro ao atualizar descrição."
-                );
-            }
+            algumaAlteracaoSalva = true;
         }
 
         if (fotoNova) {
             const formDataFoto = new FormData();
             formDataFoto.append("arquivo", fotoNova);
 
-            const respostaFoto = await fetch(
-                `${API_URL}/usuarios/foto-perfil`,
-                {
-                    method: "POST",
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    },
-                    body: formDataFoto
-                }
+            await enviarAtualizacaoPerfil(
+                "/usuarios/foto-perfil",
+                "POST",
+                formDataFoto,
+                token
             );
 
-            const dadosFoto = await respostaFoto.json();
-
-            if (!respostaFoto.ok) {
-                throw new Error(
-                    dadosFoto.mensagem ||
-                    "Erro ao atualizar foto de perfil."
-                );
-            }
+            algumaAlteracaoSalva = true;
         }
 
         if (bannerNovo) {
             const formDataBanner = new FormData();
             formDataBanner.append("arquivo", bannerNovo);
 
-            const respostaBanner = await fetch(
-                `${API_URL}/usuarios/template/${usuarioToken.id}`,
-                {
-                    method: "PUT",
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    },
-                    body: formDataBanner
-                }
+            await enviarAtualizacaoPerfil(
+                `/usuarios/template/${usuarioToken.id}`,
+                "PUT",
+                formDataBanner,
+                token
             );
 
-            const dadosBanner = await respostaBanner.json();
-
-            if (!respostaBanner.ok) {
-                throw new Error(
-                    dadosBanner.mensagem ||
-                    "Erro ao atualizar banner."
-                );
-            }
+            algumaAlteracaoSalva = true;
         }
 
         if (alterouPrivacidade) {
-            const respostaPrivacidade = await fetch(
-                `${API_URL}/usuarios/privacidade`,
+            await enviarAtualizacaoPerfil(
+                "/usuarios/privacidade",
+                "PUT",
                 {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        mostrarCurtidas: privacidadeNova
-                    })
-                }
+                    mostrarCurtidas: privacidadeNova
+                },
+                token
             );
 
-            const dadosPrivacidade = await respostaPrivacidade.json();
-
-            if (!respostaPrivacidade.ok) {
-                throw new Error(
-                    dadosPrivacidade.mensagem ||
-                    "Erro ao atualizar privacidade."
-                );
-            }
-
             mostrarCurtidasPerfil = privacidadeNova;
+            algumaAlteracaoSalva = true;
         }
 
+
         fecharModal();
-        await carregarPerfil();
+
+        if (alterouDescricao && descricao) {
+            descricao.textContent =
+                descricaoNova ||
+                "Este usuário ainda não adicionou uma descrição.";
+        }
+
+        if (fotoNova && foto) {
+            const urlTemporariaFoto = URL.createObjectURL(fotoNova);
+
+            foto.onload = () => {
+                URL.revokeObjectURL(urlTemporariaFoto);
+                foto.onload = null;
+            };
+
+            foto.src = urlTemporariaFoto;
+        }
+
+        if (bannerNovo && banner) {
+            const urlTemporariaBanner = URL.createObjectURL(bannerNovo);
+
+            banner.onload = () => {
+                URL.revokeObjectURL(urlTemporariaBanner);
+                banner.onload = null;
+            };
+
+            banner.src = urlTemporariaBanner;
+        }
 
         alert("Perfil atualizado com sucesso!");
+
+
+        carregarPerfil();
 
     } catch (erro) {
         console.error("Erro ao salvar perfil:", erro);
 
-        alert(
-            erro.message || "Erro ao atualizar perfil."
-        );
+        if (algumaAlteracaoSalva) {
+            alert(
+                `Algumas alterações foram salvas, mas ocorreu um erro: ${erro.message}`
+            );
+
+            carregarPerfil();
+        } else {
+            alert(
+                erro.message || "Erro ao atualizar perfil."
+            );
+        }
+
     } finally {
         if (botaoSalvar) {
             botaoSalvar.disabled = false;
@@ -670,6 +872,7 @@ async function salvarPerfil() {
         }
     }
 }
+
 
 function criarCabecalhoPublicacaoPerfil(publicacao) {
     const autor = publicacao.autor || publicacao.usuario || {};
@@ -679,7 +882,10 @@ function criarCabecalhoPublicacaoPerfil(publicacao) {
         FOTO_PADRAO
     );
 
-    const nomeAutor = escaparTextoPerfil(autor.nome || "Usuário");
+    const nomeAutor = escaparTextoPerfil(
+        autor.nome || "Usuário"
+    );
+
     const data = escaparTextoPerfil(
         formatarDataPerfil(publicacao.dataPublicacao)
     );
@@ -690,6 +896,8 @@ function criarCabecalhoPublicacaoPerfil(publicacao) {
                 src="${escaparTextoPerfil(fotoAutor)}"
                 alt="Foto do autor"
                 class="perfil-publicacao-avatar"
+                loading="lazy"
+                onerror="this.onerror=null;this.src='${FOTO_PADRAO}'"
             >
 
             <div class="perfil-publicacao-autor">
@@ -700,8 +908,14 @@ function criarCabecalhoPublicacaoPerfil(publicacao) {
     `;
 }
 
-function criarLinkPublicacaoPerfil(publicacaoId, texto) {
-    if (publicacaoId === undefined || publicacaoId === null) {
+function criarLinkPublicacaoPerfil(
+    publicacaoId,
+    texto = "Ver publicação"
+) {
+    if (
+        publicacaoId === undefined ||
+        publicacaoId === null
+    ) {
         return "";
     }
 
@@ -737,11 +951,11 @@ function renderizarPublicacoesPerfil() {
     painel.innerHTML = publicacoesPerfil.map(publicacao => {
         const quantidadeCurtidas = Array.isArray(publicacao.curtidas)
             ? publicacao.curtidas.length
-            : 0;
+            : Number(publicacao.totalCurtidas ?? 0);
 
         const quantidadeComentarios = Array.isArray(publicacao.comentarios)
-            ? publicacao.comentarios.length
-            : 0;
+            ? contarComentariosPublicacaoPerfil(publicacao.comentarios)
+            : Number(publicacao.totalComentarios ?? 0);
 
         return `
             <article class="perfil-publicacao">
@@ -754,22 +968,32 @@ function renderizarPublicacoesPerfil() {
                 <div class="perfil-publicacao-acoes">
                     <span>
                         <i class="fa-solid fa-heart"></i>
-                        ${quantidadeCurtidas}
+                        ${Number.isFinite(quantidadeCurtidas) ? quantidadeCurtidas : 0}
                     </span>
 
                     <span>
                         <i class="fa-regular fa-comment"></i>
-                        ${quantidadeComentarios}
+                        ${Number.isFinite(quantidadeComentarios) ? quantidadeComentarios : 0}
                     </span>
 
                     ${criarLinkPublicacaoPerfil(
-                        publicacao.id,
-                        "Ver no feed"
-                    )}
+            publicacao.id,
+            "Ver no feed"
+        )}
                 </div>
             </article>
         `;
     }).join("");
+}
+
+function contarComentariosPublicacaoPerfil(comentarios) {
+    if (!Array.isArray(comentarios)) return 0;
+
+    return comentarios.reduce((total, comentario) => {
+        return total +
+            1 +
+            contarComentariosPublicacaoPerfil(comentario.respostas);
+    }, 0);
 }
 
 function renderizarComentariosPerfil() {
@@ -791,37 +1015,49 @@ function renderizarComentariosPerfil() {
         return;
     }
 
-    painel.innerHTML = comentariosPerfil.map(comentario => `
-        <article class="perfil-publicacao">
-            <div class="perfil-publicacao-cabecalho">
-                <img
-                    src="${escaparTextoPerfil(foto.src)}"
-                    class="perfil-publicacao-avatar"
-                    alt="Foto do usuário"
-                >
+    painel.innerHTML = comentariosPerfil.map(comentario => {
+        const dataComentario =
+            comentario.dataPublicacao ||
+            comentario.dataComentario ||
+            comentario.createdAt;
 
-                <div class="perfil-publicacao-autor">
-                    <strong>${escaparTextoPerfil(nome.textContent)}</strong>
-                    <span>
-                        ${escaparTextoPerfil(
-                            formatarDataPerfil(comentario.dataPublicacao)
-                        )}
-                    </span>
+        return `
+            <article class="perfil-publicacao">
+                <div class="perfil-publicacao-cabecalho">
+                    <img
+                        src="${escaparTextoPerfil(foto?.src || FOTO_PADRAO)}"
+                        class="perfil-publicacao-avatar"
+                        alt="Foto do usuário"
+                        loading="lazy"
+                        onerror="this.onerror=null;this.src='${FOTO_PADRAO}'"
+                    >
+
+                    <div class="perfil-publicacao-autor">
+                        <strong>
+                            ${escaparTextoPerfil(nome?.textContent || "Usuário")}
+                        </strong>
+
+                        <span>
+                            ${escaparTextoPerfil(
+            formatarDataPerfil(dataComentario)
+        )}
+                        </span>
+                    </div>
                 </div>
-            </div>
 
-            <div class="perfil-publicacao-texto">
-                ${escaparTextoPerfil(comentario.texto || "")}
-            </div>
+                <div class="perfil-publicacao-texto">
+                    ${escaparTextoPerfil(comentario.texto || "")}
+                </div>
 
-            <div class="perfil-publicacao-acoes">
-                ${criarLinkPublicacaoPerfil(
-                    comentario.publicacaoId,
-                    "Ver publicação"
-                )}
-            </div>
-        </article>
-    `).join("");
+                <div class="perfil-publicacao-acoes">
+                    ${criarLinkPublicacaoPerfil(
+            comentario.publicacaoId,
+            "Ver publicação"
+        )}
+                </div>
+            </article>
+        `;
+    }).join("");
 }
 
 function renderizarCurtidasPerfil() {
@@ -832,6 +1068,13 @@ function renderizarCurtidasPerfil() {
     if (curtidasPrivadas) {
         mensagemAtividadesPerfil(
             "Este usuário optou por manter suas curtidas privadas."
+        );
+        return;
+    }
+
+    if (carregandoCurtidasPerfil) {
+        mensagemAtividadesPerfil(
+            "Carregando curtidas..."
         );
         return;
     }
@@ -870,9 +1113,9 @@ function renderizarCurtidasPerfil() {
                     </span>
 
                     ${criarLinkPublicacaoPerfil(
-                        publicacao.id,
-                        "Ver publicação"
-                    )}
+            publicacao.id,
+            "Ver publicação"
+        )}
                 </div>
             </article>
         `;
@@ -880,7 +1123,26 @@ function renderizarCurtidasPerfil() {
 }
 
 function renderizarAtividadesPerfil() {
-    if (carregandoAtividadesPerfil) {
+    if (
+        abaAtualPerfil === "curtidas" &&
+        curtidasPrivadas
+    ) {
+        renderizarCurtidasPerfil();
+        return;
+    }
+
+    if (
+        abaAtualPerfil === "curtidas" &&
+        carregandoCurtidasPerfil
+    ) {
+        mensagemAtividadesPerfil("Carregando curtidas...");
+        return;
+    }
+
+    if (
+        abaAtualPerfil !== "curtidas" &&
+        carregandoAtividadesPerfil
+    ) {
         mensagemAtividadesPerfil("Carregando atividades...");
         return;
     }
@@ -908,16 +1170,22 @@ function configurarAbasPerfil() {
     if (!abas.length || !painel) return;
 
     function selecionarAba(tipo) {
-        if (!["publicacoes", "comentarios", "curtidas"].includes(tipo)) {
+        if (
+            !["publicacoes", "comentarios", "curtidas"].includes(tipo)
+        ) {
             return;
         }
 
         abaAtualPerfil = tipo;
 
         abas.forEach(aba => {
-            aba.classList.toggle(
-                "ativa",
-                aba.dataset.atividade === tipo
+            const ativa = aba.dataset.atividade === tipo;
+
+            aba.classList.toggle("ativa", ativa);
+
+            aba.setAttribute(
+                "aria-selected",
+                String(ativa)
             );
         });
 
@@ -939,7 +1207,10 @@ function configurarAbasPerfil() {
         });
 
         card.addEventListener("keydown", evento => {
-            if (evento.key === "Enter" || evento.key === " ") {
+            if (
+                evento.key === "Enter" ||
+                evento.key === " "
+            ) {
                 evento.preventDefault();
                 card.click();
             }
@@ -957,13 +1228,27 @@ if (modal) {
     });
 }
 
+document.addEventListener("keydown", evento => {
+    if (
+        evento.key === "Escape" &&
+        modal &&
+        modal.style.display === "flex"
+    ) {
+        fecharModal();
+    }
+});
+
 function iniciarPerfil() {
     configurarAbasPerfil();
     carregarPerfil();
 }
 
 if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", iniciarPerfil);
+    document.addEventListener(
+        "DOMContentLoaded",
+        iniciarPerfil,
+        { once: true }
+    );
 } else {
     iniciarPerfil();
 }

@@ -1,87 +1,208 @@
 
 (() => {
-    let modal;
-    let conteudo;
+    "use strict";
+
+    let modal = null;
+    let conteudo = null;
     let idAberto = null;
     let publicacaoAtual = null;
+    let requisicaoAtual = 0;
 
-    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-
-    const apiBase = () =>
+    const API = (
         typeof API_URL !== "undefined"
-            ? String(API_URL).replace(/\/$/, "")
-            : "";
+            ? String(API_URL)
+            : "https://jornalvirtual-git-main-biaams-sys1.vercel.app"
+    ).replace(/\/+$/, "");
+
+    const FOTO_PADRAO = "/img/avatar-padrao.png";
+
+    const token = () =>
+        localStorage.getItem("token") ||
+        sessionStorage.getItem("token");
 
     const esc = valor =>
-        String(valor ?? "").replace(/[&<>"']/g, caractere => ({
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;"
-        }[caractere]));
+        String(valor ?? "").replace(
+            /[&<>"']/g,
+            caractere => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            }[caractere])
+        );
 
-    const data = valor =>
-        valor
-            ? new Date(valor).toLocaleString("pt-BR", {
-                dateStyle: "short",
-                timeStyle: "short"
-            })
-            : "";
+    const data = valor => {
+        if (!valor) return "";
 
-    const idUsuario = () => {
+        const resultado = new Date(valor);
+
+        if (Number.isNaN(resultado.getTime())) {
+            return "";
+        }
+
+        return resultado.toLocaleString("pt-BR", {
+            dateStyle: "short",
+            timeStyle: "short"
+        });
+    };
+
+    function obterUsuarioToken() {
         try {
-            const parte = token.split(".")[1]
+            const jwt = token();
+
+            if (!jwt) return null;
+
+            const partes = jwt.split(".");
+
+            if (partes.length !== 3) return null;
+
+            const parte = partes[1]
                 .replace(/-/g, "+")
                 .replace(/_/g, "/");
 
-            return Number(JSON.parse(atob(parte)).id);
+            const base64 = parte.padEnd(
+                Math.ceil(parte.length / 4) * 4,
+                "="
+            );
+
+            const texto = atob(base64);
+
+            const usuario = JSON.parse(
+                decodeURIComponent(
+                    Array.from(texto)
+                        .map(caractere =>
+                            "%" +
+                            caractere.charCodeAt(0)
+                                .toString(16)
+                                .padStart(2, "0")
+                        )
+                        .join("")
+                )
+            );
+
+            if (
+                typeof usuario.exp === "number" &&
+                usuario.exp * 1000 <= Date.now()
+            ) {
+                return null;
+            }
+
+            return usuario;
         } catch {
             return null;
         }
+    }
+
+    const idUsuario = () => {
+        const usuario = obterUsuarioToken();
+
+        const id = Number(
+            usuario?.id ??
+            usuario?.usuarioId ??
+            usuario?.userId
+        );
+
+        return Number.isInteger(id) && id > 0
+            ? id
+            : null;
     };
 
-    const requisicao = async (rota, opcoes = {}) => {
-        if (!apiBase()) {
-            throw new Error("API_URL não está configurada.");
-        }
+    async function requisicao(rota, opcoes = {}) {
+        const jwt = token();
 
-        const resposta = await fetch(`${apiBase()}${rota}`, {
-            ...opcoes,
-            headers: {
-                Authorization: `Bearer ${token}`,
-                ...(opcoes.body ? {
-                    "Content-Type": "application/json"
-                } : {}),
-                ...(opcoes.headers || {})
-            }
-        });
-
-        const json = await resposta.json().catch(() => ({}));
-
-        if (!resposta.ok) {
+        if (!jwt || !obterUsuarioToken()) {
             throw new Error(
-                json.mensagem ||
-                json.erro ||
-                `Erro ${resposta.status}`
+                "Sua sessão expirou. Faça login novamente."
             );
         }
 
-        return json;
-    };
+        const headers = {
+            Authorization: `Bearer ${jwt}`,
+            ...(opcoes.body instanceof FormData
+                ? {}
+                : opcoes.body
+                    ? { "Content-Type": "application/json" }
+                    : {}),
+            ...(opcoes.headers || {})
+        };
 
-    const foto = caminho => {
-        if (!caminho) return "/img/avatar-padrao.png";
+        let resposta;
 
-        if (/^(https?:|data:)/i.test(caminho)) {
-            return caminho;
+        try {
+            resposta = await fetch(`${API}${rota}`, {
+                ...opcoes,
+                headers
+            });
+        } catch {
+            throw new Error(
+                "Não foi possível conectar ao servidor."
+            );
         }
 
-        return `${apiBase()}/${String(caminho).replace(/^\/+/, "")}`;
-    };
+        const dados = await resposta.json().catch(() => ({}));
 
-    const midias = publicacao =>
-        (publicacao.midias || []).map(midia => {
+        if (!resposta.ok) {
+            const erro = new Error(
+                dados.mensagem ||
+                dados.erro ||
+                dados.error ||
+                dados.message ||
+                `Erro ${resposta.status}`
+            );
+
+            erro.status = resposta.status;
+
+            throw erro;
+        }
+
+        return dados;
+    }
+
+
+    function caminhoArquivo(caminho, padrao = "") {
+        if (!caminho) return padrao;
+
+        let url = String(caminho).trim().replace(/\\/g, "/");
+
+        if (!url) return padrao;
+
+        if (/^(https?:\/\/|data:|blob:)/i.test(url)) {
+            return url;
+        }
+
+        const supabaseUrl =
+            "https://hepwnbumziimvfugvjbe.supabase.co";
+
+        const caminhoLimpo = url
+            .replace(/^\/+/, "")
+            .replace(/^midias\//, "");
+
+        if (
+            caminhoLimpo.startsWith("perfil/") ||
+            caminhoLimpo.startsWith("perfis/") ||
+            caminhoLimpo.startsWith("usuarios/") ||
+            caminhoLimpo.startsWith("template/") ||
+            caminhoLimpo.startsWith("templates/") ||
+            caminhoLimpo.startsWith("publicacoes/") ||
+            caminhoLimpo.startsWith("noticias/")
+        ) {
+            return `${supabaseUrl}/storage/v1/object/public/midias/${caminhoLimpo}`;
+        }
+
+        return `${API}/${caminhoLimpo}`;
+    }
+
+
+    const foto = caminho =>
+        caminhoArquivo(caminho, FOTO_PADRAO);
+
+    function midias(publicacao) {
+        const lista = Array.isArray(publicacao.midias)
+            ? publicacao.midias
+            : [];
+
+        return lista.map(midia => {
             const caminho =
                 midia.url ||
                 midia.path ||
@@ -91,27 +212,58 @@
 
             if (!caminho) return "";
 
-            const url = /^(https?:)/i.test(caminho)
-                ? caminho
-                : `${apiBase()}/${String(caminho).replace(/^\/+/, "")}`;
+            const url = caminhoArquivo(caminho);
 
-            const tipo = midia.mimeType || midia.tipo || "";
+            const tipo = String(
+                midia.mimeType ||
+                midia.tipo ||
+                ""
+            ).toLowerCase();
 
-            if (tipo.startsWith("image/")) {
+            const extensao = String(url)
+                .split("?")[0]
+                .split(".")
+                .pop()
+                .toLowerCase();
+
+            const imagem =
+                tipo.startsWith("image/") ||
+                [
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "gif",
+                    "webp",
+                    "svg",
+                    "avif"
+                ].includes(extensao);
+
+            const video =
+                tipo.startsWith("video/") ||
+                [
+                    "mp4",
+                    "webm",
+                    "ogg",
+                    "mov"
+                ].includes(extensao);
+
+            if (imagem) {
                 return `
                     <img
                         class="detalhes-midia"
                         src="${esc(url)}"
                         alt="Imagem da publicação"
+                        loading="lazy"
                     >
                 `;
             }
 
-            if (tipo.startsWith("video/")) {
+            if (video) {
                 return `
                     <video
                         class="detalhes-midia"
                         controls
+                        preload="metadata"
                         src="${esc(url)}"
                     ></video>
                 `;
@@ -127,98 +279,153 @@
                 </a>
             `;
         }).join("");
+    }
 
+    function contarComentarios(lista) {
+        if (!Array.isArray(lista)) return 0;
 
-    const respostas = (lista, nivel = 0) =>
-        (lista || []).map(comentario => {
-            const autor = comentario.autor || comentario.usuario || {};
+        return lista.reduce((total, comentario) => {
+            const respostas =
+                comentario.respostas ||
+                comentario.replies ||
+                [];
+
+            return total +
+                1 +
+                contarComentarios(respostas);
+        }, 0);
+    }
+
+    function respostas(lista, nivel = 0) {
+        if (!Array.isArray(lista)) return "";
+
+        return lista.map(comentario => {
+            const autor =
+                comentario.autor ||
+                comentario.usuario ||
+                {};
+
             const nome = autor.nome || "Usuário";
-            const quantidade = (comentario.respostas || []).length;
+
+            const filhos =
+                comentario.respostas ||
+                comentario.replies ||
+                [];
+
+            const quantidade = filhos.length;
             const ehResposta = nivel > 0;
 
+            const comentarioId = Number(comentario.id);
+
             return `
-            <div
-                class="detalhes-comentario ${ehResposta ? "resposta" : "item-comentario"}"
-                data-comentario="${Number(comentario.id)}"
-            >
-                <div class="header-comentario">
-                    <img
-                        src="${esc(foto(autor.fotoPerfil))}"
-                        alt=""
-                        class="avatar-comentario"
-                    >
+                <div
+                    class="detalhes-comentario ${ehResposta
+                    ? "resposta"
+                    : "item-comentario"
+                }"
+                    data-comentario="${comentarioId}"
+                >
+                    <div class="header-comentario">
+                        <img
+                            src="${esc(foto(autor.fotoPerfil))}"
+                            alt=""
+                            class="avatar-comentario"
+                            onerror="this.onerror=null;this.src='${FOTO_PADRAO}'"
+                        >
 
-                    <div class="conteudo-comentario">
-                        <div class="detalhes-comentario-topo">
-                            <strong class="nome-comentario">
-                                ${esc(nome)}
-                            </strong>
+                        <div class="conteudo-comentario">
+                            <div class="detalhes-comentario-topo">
+                                <strong class="nome-comentario">
+                                    ${esc(nome)}
+                                </strong>
 
-                            <span class="data-comentario">
-                                ${esc(data(comentario.dataPublicacao))}
-                            </span>
-                        </div>
-
-                        <p class="texto-comentario">${esc(comentario.texto)}</p>
-
-                        ${!ehResposta ? `
-                            <div class="acoes-comentario">
-                                <button
-                                    type="button"
-                                    data-acao-detalhe="responder"
-                                    data-id="${Number(comentario.id)}"
-                                    data-nome="${esc(nome)}"
-                                >
-                                    Responder
-                                </button>
+                                <span class="data-comentario">
+                                    ${esc(data(
+                    comentario.dataPublicacao ||
+                    comentario.createdAt
+                ))}
+                                </span>
                             </div>
-                        ` : ""}
 
-                        ${!ehResposta && quantidade > 0 ? `
-                            <div class="grupo-respostas">
-                                <button
-                                    type="button"
-                                    class="btn-ver-respostas"
-                                    data-acao-detalhe="alternar-respostas"
-                                    data-quantidade="${quantidade}"
-                                    aria-expanded="false"
-                                >
-                                    <i class="fa-solid fa-chevron-down"></i>
-                                    <span>
-                                        Ver ${quantidade}
-                                        ${quantidade === 1 ? "resposta" : "respostas"}
-                                    </span>
-                                </button>
+                            <p class="texto-comentario">${esc(
+                    comentario.texto ||
+                    comentario.conteudo ||
+                    ""
+                )}</p>
 
-                                <div
-                                    class="respostas respostas-recolhidas"
-                                    hidden
-                                >
-                                    ${respostas(comentario.respostas, nivel + 1)}
+                            ${!ehResposta ? `
+                                <div class="acoes-comentario">
+                                    <button
+                                        type="button"
+                                        data-acao-detalhe="responder"
+                                        data-id="${comentarioId}"
+                                        data-nome="${esc(nome)}"
+                                    >
+                                        Responder
+                                    </button>
                                 </div>
-                            </div>
-                        ` : ""}
+                            ` : ""}
+
+                            ${!ehResposta && quantidade > 0 ? `
+                                <div class="grupo-respostas">
+                                    <button
+                                        type="button"
+                                        class="btn-ver-respostas"
+                                        data-acao-detalhe="alternar-respostas"
+                                        data-quantidade="${quantidade}"
+                                        aria-expanded="false"
+                                    >
+                                        <i class="fa-solid fa-chevron-down"></i>
+
+                                        <span>
+                                            Ver ${quantidade}
+                                            ${quantidade === 1
+                        ? "resposta"
+                        : "respostas"
+                    }
+                                        </span>
+                                    </button>
+
+                                    <div
+                                        class="respostas respostas-recolhidas"
+                                        hidden
+                                    >
+                                        ${respostas(
+                        filhos,
+                        nivel + 1
+                    )}
+                                    </div>
+                                </div>
+                            ` : ""}
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
         }).join("");
+    }
 
-    const criarModal = () => {
+    function criarModal() {
         if (modal) return;
 
         modal = document.createElement("section");
+
         modal.id = "publicacaoDetalhes";
         modal.className = "publicacao-detalhes";
         modal.hidden = true;
 
         modal.setAttribute("role", "dialog");
         modal.setAttribute("aria-modal", "true");
-        modal.setAttribute("aria-label", "Detalhes da publicação");
+        modal.setAttribute(
+            "aria-label",
+            "Detalhes da publicação"
+        );
 
         modal.innerHTML = `
             <header class="detalhes-barra">
-                <button type="button" id="voltarPublicacaoDetalhes">
+                <button
+                    type="button"
+                    id="voltarPublicacaoDetalhes"
+                >
                     <i class="fa-solid fa-arrow-left"></i>
                     Voltar
                 </button>
@@ -242,57 +449,102 @@
 
         document.body.appendChild(modal);
 
-        conteudo = modal.querySelector("#conteudoPublicacaoDetalhes");
+        conteudo = modal.querySelector(
+            "#conteudoPublicacaoDetalhes"
+        );
 
-        modal.querySelector("#voltarPublicacaoDetalhes")
+        modal
+            .querySelector("#voltarPublicacaoDetalhes")
             .addEventListener("click", fechar);
 
-        modal.querySelector("#fecharPublicacaoDetalhes")
+        modal
+            .querySelector("#fecharPublicacaoDetalhes")
             .addEventListener("click", fechar);
 
         modal.addEventListener("click", interagir);
-    };
+    }
 
-    const carregar = async id => {
+
+    async function carregar(id) {
         const dados = await requisicao("/publicacoes/listar");
 
         const lista = Array.isArray(dados)
             ? dados
-            : dados.publicacoes || [];
+            : Array.isArray(dados.publicacoes)
+                ? dados.publicacoes
+                : Array.isArray(dados.lista)
+                    ? dados.lista
+                    : [];
 
-        const publicacao = lista.find(
+        const encontrada = lista.find(
             item => Number(item.id) === Number(id)
         );
 
-        if (!publicacao) {
-            throw new Error("Publicação não encontrada ou indisponível.");
+        if (!encontrada) {
+            throw new Error(
+                "Publicação não encontrada ou indisponível."
+            );
         }
 
+        const publicacao = { ...encontrada };
+
         try {
-            const comentarios = await requisicao(
+            const dadosComentarios = await requisicao(
                 `/comentarios/publicacao/${id}`
             );
 
-            publicacao.comentarios = Array.isArray(comentarios)
-                ? comentarios
-                : comentarios.comentarios || publicacao.comentarios || [];
+            publicacao.comentarios = Array.isArray(dadosComentarios)
+                ? dadosComentarios
+                : Array.isArray(dadosComentarios.comentarios)
+                    ? dadosComentarios.comentarios
+                    : publicacao.comentarios || [];
         } catch (erro) {
-            console.warn("Não foi possível atualizar os comentários:", erro);
+            console.warn(
+                "Não foi possível atualizar os comentários:",
+                erro
+            );
+
+            publicacao.comentarios = Array.isArray(publicacao.comentarios)
+                ? publicacao.comentarios
+                : [];
         }
 
         return publicacao;
-    };
+    }
 
-    const renderizar = publicacao => {
+    function renderizar(publicacao) {
         publicacaoAtual = publicacao;
 
-        const autor = publicacao.autor || publicacao.usuario || {};
+        const autor =
+            publicacao.autor ||
+            publicacao.usuario ||
+            {};
 
-        const curtiu = (publicacao.curtidas || []).some(
-            curtida => Number(curtida.usuarioId) === idUsuario()
+        const listaCurtidas = Array.isArray(publicacao.curtidas)
+            ? publicacao.curtidas
+            : [];
+
+        const curtiu = listaCurtidas.some(
+            curtida =>
+                Number(
+                    curtida.usuarioId ??
+                    curtida.usuario?.id
+                ) === idUsuario()
         );
 
-        const totalComentarios = (publicacao.comentarios || []).length;
+        const quantidadeCurtidas = Array.isArray(publicacao.curtidas)
+            ? publicacao.curtidas.length
+            : Number(
+                publicacao.totalCurtidas ??
+                publicacao._count?.curtidas ??
+                0
+            );
+
+        const comentarios = Array.isArray(publicacao.comentarios)
+            ? publicacao.comentarios
+            : [];
+
+        const totalComentarios = contarComentarios(comentarios);
 
         conteudo.innerHTML = `
             <div class="detalhes-grade">
@@ -301,18 +553,27 @@
                         <img
                             class="detalhes-avatar"
                             src="${esc(foto(autor.fotoPerfil))}"
-                            alt=""
+                            alt="Foto do autor"
+                            onerror="this.onerror=null;this.src='${FOTO_PADRAO}'"
                         >
 
                         <div>
-                            <strong>${esc(autor.nome || "Usuário")}</strong>
-                            <time>${esc(data(publicacao.dataPublicacao))}</time>
+                            <strong>${esc(
+            autor.nome || "Usuário"
+        )}</strong>
+
+                            <time>${esc(data(
+            publicacao.dataPublicacao ||
+            publicacao.createdAt
+        ))}</time>
                         </div>
                     </div>
 
-                    <div class="detalhes-texto">
-                        ${esc(publicacao.texto)}
-                    </div>
+                    <div class="detalhes-texto">${esc(
+            publicacao.texto ||
+            publicacao.conteudo ||
+            ""
+        )}</div>
 
                     <div class="detalhes-midias">
                         ${midias(publicacao)}
@@ -323,14 +584,28 @@
                             type="button"
                             data-acao-detalhe="curtir"
                             class="${curtiu ? "curtido" : ""}"
+                            aria-pressed="${curtiu}"
                         >
-                            <i class="${curtiu ? "fa-solid" : "fa-regular"} fa-heart"></i>
-                            ${publicacao.curtidas?.length || 0} curtidas
+                            <i class="${curtiu
+                ? "fa-solid"
+                : "fa-regular"
+            } fa-heart"></i>
+
+                            ${quantidadeCurtidas}
+                            ${quantidadeCurtidas === 1
+                ? "curtida"
+                : "curtidas"
+            }
                         </button>
 
                         <span>
                             <i class="fa-regular fa-comment"></i>
-                            ${totalComentarios} comentários
+
+                            ${totalComentarios}
+                            ${totalComentarios === 1
+                ? "comentário"
+                : "comentários"
+            }
                         </span>
                     </div>
                 </article>
@@ -342,9 +617,11 @@
                     </div>
 
                     <div class="detalhes-lista-comentarios">
-                        ${totalComentarios
-                ? respostas(publicacao.comentarios)
-                : '<p class="detalhes-vazio">Ainda não há comentários.</p>'
+                        ${comentarios.length
+                ? respostas(comentarios)
+                : `<p class="detalhes-vazio">
+                                    Ainda não há comentários.
+                                </p>`
             }
                     </div>
 
@@ -383,88 +660,177 @@
             </div>
         `;
 
-        const form = modal.querySelector("#formComentarioDetalhes");
+        const form = modal.querySelector(
+            "#formComentarioDetalhes"
+        );
 
         form.addEventListener("submit", async evento => {
             evento.preventDefault();
 
-            const campo = modal.querySelector("#textoComentarioDetalhes");
+            const campo = form.querySelector(
+                "#textoComentarioDetalhes"
+            );
+
             const texto = campo.value.trim();
 
             if (!texto) return;
 
-            const botao = form.querySelector('[type="submit"]');
+            const botao = form.querySelector(
+                '[type="submit"]'
+            );
+
+            if (botao.disabled) return;
+
+            const publicacaoId = idAberto;
+
+            if (
+                !Number.isInteger(publicacaoId) ||
+                publicacaoId <= 0
+            ) {
+                return;
+            }
+
+            const comentarioPaiId = form.dataset.resposta
+                ? Number(form.dataset.resposta)
+                : null;
+
             botao.disabled = true;
+            botao.textContent = "Publicando...";
 
             try {
-                await requisicao("/comentarios/cadastrar", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        publicacaoId: idAberto,
-                        texto,
-                        comentarioPaiId: form.dataset.resposta
-                            ? Number(form.dataset.resposta)
-                            : null
-                    })
-                });
+                await requisicao(
+                    "/comentarios/cadastrar",
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            publicacaoId,
+                            texto,
+                            comentarioPaiId
+                        })
+                    }
+                );
 
-                await atualizar();
+                if (
+                    idAberto === publicacaoId &&
+                    modal &&
+                    !modal.hidden
+                ) {
+                    await atualizar();
+                }
+
                 window.atualizarNotificacoes?.();
             } catch (erro) {
-                alert(erro.message);
-                botao.disabled = false;
+                console.error(
+                    "Erro ao publicar comentário:",
+                    erro
+                );
+
+                alert(
+                    erro.message ||
+                    "Não foi possível publicar o comentário."
+                );
+
+                if (form.isConnected) {
+                    botao.disabled = false;
+                    botao.textContent = "Publicar comentário";
+                }
             }
         });
 
-        modal.querySelector("#cancelarRespostaDetalhes")
-            .addEventListener("click", () => {
-                delete form.dataset.resposta;
+        const cancelarResposta = modal.querySelector(
+            "#cancelarRespostaDetalhes"
+        );
 
-                const aviso = modal.querySelector("#detalhesRespondendo");
-                aviso.hidden = true;
-                aviso.textContent = "";
+        cancelarResposta.addEventListener("click", () => {
+            delete form.dataset.resposta;
 
-                modal.querySelector("#cancelarRespostaDetalhes").hidden = true;
+            const aviso = modal.querySelector(
+                "#detalhesRespondendo"
+            );
 
-                const campo = modal.querySelector("#textoComentarioDetalhes");
-                campo.placeholder = "Escreva um comentário...";
-            });
-    };
+            aviso.hidden = true;
+            aviso.textContent = "";
 
-    const atualizar = async () => {
-        const publicacao = await carregar(idAberto);
+            cancelarResposta.hidden = true;
+
+            const campo = modal.querySelector(
+                "#textoComentarioDetalhes"
+            );
+
+            campo.placeholder = "Escreva um comentário...";
+        });
+    }
+
+    async function atualizar() {
+        const id = idAberto;
 
         if (
-            modal &&
-            !modal.hidden &&
-            Number(idAberto) === Number(publicacao.id)
+            !Number.isInteger(id) ||
+            id <= 0
         ) {
-            renderizar(publicacao);
+            return;
         }
-    };
 
-    const alternarRespostasDetalhes = botao => {
-        const grupo = botao.closest(".grupo-respostas");
-        const container = grupo?.querySelector(":scope > .respostas");
+        const numeroRequisicao = ++requisicaoAtual;
+
+        const publicacao = await carregar(id);
+
+        if (
+            numeroRequisicao !== requisicaoAtual ||
+            idAberto !== id ||
+            !modal ||
+            modal.hidden
+        ) {
+            return;
+        }
+
+        renderizar(publicacao);
+    }
+
+    function alternarRespostasDetalhes(botao) {
+        const grupo = botao.closest(
+            ".grupo-respostas"
+        );
+
+        const container = grupo?.querySelector(
+            ":scope > .respostas"
+        );
 
         if (!container) return;
 
         const abrir = container.hidden;
 
         container.hidden = !abrir;
-        container.classList.toggle("respostas-recolhidas", !abrir);
-        container.classList.toggle("respostas-abertas", abrir);
 
-        botao.setAttribute("aria-expanded", String(abrir));
+        container.classList.toggle(
+            "respostas-recolhidas",
+            !abrir
+        );
 
-        const quantidade = Number(botao.dataset.quantidade);
+        container.classList.toggle(
+            "respostas-abertas",
+            abrir
+        );
+
+        botao.setAttribute(
+            "aria-expanded",
+            String(abrir)
+        );
+
+        const quantidade = Number(
+            botao.dataset.quantidade
+        );
+
         const texto = botao.querySelector("span");
         const icone = botao.querySelector("i");
 
         if (texto) {
             texto.textContent = abrir
                 ? "Ocultar respostas"
-                : `Ver ${quantidade} ${quantidade === 1 ? "resposta" : "respostas"}`;
+                : `Ver ${quantidade} ${quantidade === 1
+                    ? "resposta"
+                    : "respostas"
+                }`;
         }
 
         if (icone) {
@@ -472,73 +838,196 @@
                 ? "fa-solid fa-chevron-up"
                 : "fa-solid fa-chevron-down";
         }
-    };
+    }
 
-    const interagir = async evento => {
-        const botao = evento.target.closest("[data-acao-detalhe]");
 
-        if (!botao) return;
+    async function interagir(evento) {
+        const botao = evento.target.closest(
+            "[data-acao-detalhe]"
+        );
 
-        if (botao.dataset.acaoDetalhe === "alternar-respostas") {
+        if (!botao || !modal || modal.hidden) {
+            return;
+        }
+
+        const acao = botao.dataset.acaoDetalhe;
+
+        if (acao === "alternar-respostas") {
             evento.preventDefault();
             alternarRespostasDetalhes(botao);
             return;
         }
 
-        if (botao.dataset.acaoDetalhe === "responder") {
-            const form = modal.querySelector("#formComentarioDetalhes");
+        if (acao === "responder") {
+            evento.preventDefault();
 
-            form.dataset.resposta = botao.dataset.id;
+            const form = modal.querySelector(
+                "#formComentarioDetalhes"
+            );
 
-            const aviso = modal.querySelector("#detalhesRespondendo");
-            aviso.hidden = false;
-            aviso.textContent = `Respondendo a ${botao.dataset.nome}`;
+            if (!form) return;
 
-            modal.querySelector("#cancelarRespostaDetalhes").hidden = false;
+            const comentarioId = Number(
+                botao.dataset.id
+            );
 
-            const campo = modal.querySelector("#textoComentarioDetalhes");
-            campo.placeholder = `Responder a ${botao.dataset.nome}...`;
-            campo.focus();
+            if (
+                !Number.isInteger(comentarioId) ||
+                comentarioId <= 0
+            ) {
+                return;
+            }
+
+            const nome = botao.dataset.nome || "Usuário";
+
+            form.dataset.resposta = String(
+                comentarioId
+            );
+
+            const aviso = modal.querySelector(
+                "#detalhesRespondendo"
+            );
+
+            if (aviso) {
+                aviso.hidden = false;
+                aviso.textContent = `Respondendo a ${nome}`;
+            }
+
+            const cancelar = modal.querySelector(
+                "#cancelarRespostaDetalhes"
+            );
+
+            if (cancelar) {
+                cancelar.hidden = false;
+            }
+
+            const campo = modal.querySelector(
+                "#textoComentarioDetalhes"
+            );
+
+            if (campo) {
+                campo.placeholder = `Responder a ${nome}...`;
+                campo.focus();
+            }
 
             return;
         }
 
-        if (botao.dataset.acaoDetalhe === "curtir") {
+        if (acao === "curtir") {
+            evento.preventDefault();
+
+            if (botao.disabled || !publicacaoAtual) {
+                return;
+            }
+
+            const usuarioId = idUsuario();
+
+            if (!usuarioId) {
+                alert(
+                    "Sua sessão expirou. Faça login novamente."
+                );
+                return;
+            }
+
+            const publicacaoId = idAberto;
+
+            if (
+                !Number.isInteger(publicacaoId) ||
+                publicacaoId <= 0
+            ) {
+                return;
+            }
+
+            const curtidas = Array.isArray(
+                publicacaoAtual.curtidas
+            )
+                ? publicacaoAtual.curtidas
+                : [];
+
+            const curtiu = curtidas.some(
+                curtida =>
+                    Number(
+                        curtida.usuarioId ??
+                        curtida.usuario?.id
+                    ) === usuarioId
+            );
+
             botao.disabled = true;
 
             try {
-                const curtiu = (publicacaoAtual.curtidas || []).some(
-                    curtida => Number(curtida.usuarioId) === idUsuario()
-                );
-
                 await requisicao(
-                    curtiu ? "/curtidas/descurtir" : "/curtidas/curtir",
+                    curtiu
+                        ? "/curtidas/descurtir"
+                        : "/curtidas/curtir",
                     {
-                        method: curtiu ? "DELETE" : "POST",
+                        method: curtiu
+                            ? "DELETE"
+                            : "POST",
                         body: JSON.stringify({
-                            publicacaoId: idAberto
+                            publicacaoId
                         })
                     }
                 );
 
-                await atualizar();
-                window.atualizarNotificacoes?.();
+                if (
+                    idAberto === publicacaoId &&
+                    modal &&
+                    !modal.hidden
+                ) {
+                    await atualizar();
+                }
+
+                if (
+                    typeof window.atualizarNotificacoes === "function"
+                ) {
+                    window.atualizarNotificacoes();
+                }
+
+                if (
+                    typeof window.atualizarFeed === "function"
+                ) {
+                    window.atualizarFeed();
+                }
             } catch (erro) {
-                alert(erro.message);
-                botao.disabled = false;
+                console.error(
+                    "Erro ao atualizar curtida:",
+                    erro
+                );
+
+                alert(
+                    erro.message ||
+                    "Não foi possível atualizar a curtida."
+                );
+            } finally {
+                if (botao.isConnected) {
+                    botao.disabled = false;
+                }
             }
         }
-    };
+    }
 
     async function abrir(id) {
-        if (!Number.isInteger(Number(id)) || Number(id) <= 0) return;
+        const publicacaoId = Number(id);
+
+        if (
+            !Number.isInteger(publicacaoId) ||
+            publicacaoId <= 0
+        ) {
+            return;
+        }
 
         criarModal();
 
-        idAberto = Number(id);
+        idAberto = publicacaoId;
+        publicacaoAtual = null;
+
+        requisicaoAtual++;
+
         modal.hidden = false;
 
-        document.body.classList.add("detalhes-abertos");
+        document.body.classList.add(
+            "detalhes-abertos"
+        );
 
         conteudo.innerHTML = `
             <div class="detalhes-carregando">
@@ -549,31 +1038,87 @@
         try {
             await atualizar();
         } catch (erro) {
+            if (
+                idAberto !== publicacaoId ||
+                !modal ||
+                modal.hidden
+            ) {
+                return;
+            }
+
+            console.error(
+                "Erro ao abrir publicação:",
+                erro
+            );
+
             conteudo.innerHTML = `
                 <div class="detalhes-carregando">
-                    ${esc(erro.message)}
+                    ${esc(
+                erro.message ||
+                "Não foi possível carregar a publicação."
+            )}
                 </div>
             `;
         }
     }
 
-
     function fechar() {
         if (!modal) return;
 
+        requisicaoAtual++;
+
         modal.hidden = true;
-        document.body.classList.remove("detalhes-abertos");
+
+        document.body.classList.remove(
+            "detalhes-abertos"
+        );
 
         idAberto = null;
         publicacaoAtual = null;
     }
 
-    document.addEventListener("keydown", evento => {
-        if (evento.key === "Escape" && modal && !modal.hidden) {
-            fechar();
+    document.addEventListener(
+        "keydown",
+        evento => {
+            if (
+                evento.key === "Escape" &&
+                modal &&
+                !modal.hidden
+            ) {
+                fechar();
+            }
         }
-    });
+    );
+
+    function abrirPublicacaoPelaURL() {
+        const parametros = new URLSearchParams(
+            window.location.search
+        );
+
+        const publicacaoId = Number(
+            parametros.get("publicacao")
+        );
+
+        if (
+            !Number.isInteger(publicacaoId) ||
+            publicacaoId <= 0
+        ) {
+            return;
+        }
+
+        abrir(publicacaoId);
+    }
 
     window.abrirPublicacaoNotificacao = abrir;
     window.fecharPublicacaoNotificacao = fechar;
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            abrirPublicacaoPelaURL,
+            { once: true }
+        );
+    } else {
+        abrirPublicacaoPelaURL();
+    }
 })();

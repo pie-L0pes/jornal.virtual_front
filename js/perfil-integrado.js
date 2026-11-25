@@ -2,7 +2,12 @@
 (() => {
     "use strict";
 
-    const base = typeof API_URL !== "undefined" ? API_URL : "";
+    const base = (
+        typeof API_URL !== "undefined"
+            ? API_URL
+            : "https://jornalvirtual-git-main-biaams-sys1.vercel.app"
+    ).replace(/\/+$/, "");
+
     const area = document.getElementById("areaPerfil");
 
     if (!area) return;
@@ -22,14 +27,23 @@
         carregando: false
     };
 
+    let requisicaoAtual = 0;
+
     const token = () =>
         localStorage.getItem("token") ||
         sessionStorage.getItem("token");
 
     function payload() {
         try {
-            const parte = token()
-                .split(".")[1]
+            const jwt = token();
+
+            if (!jwt) return {};
+
+            const partes = jwt.split(".");
+
+            if (partes.length !== 3) return {};
+
+            const parte = partes[1]
                 .replace(/-/g, "+")
                 .replace(/_/g, "/");
 
@@ -38,15 +52,24 @@
                 "="
             );
 
-            return JSON.parse(
+            const dados = JSON.parse(
                 decodeURIComponent(
-                    Array.from(atob(base64), c =>
-                        "%" + c.charCodeAt(0)
+                    Array.from(atob(base64), caractere =>
+                        "%" + caractere.charCodeAt(0)
                             .toString(16)
                             .padStart(2, "0")
                     ).join("")
                 )
             );
+
+            if (
+                typeof dados.exp === "number" &&
+                dados.exp * 1000 <= Date.now()
+            ) {
+                return {};
+            }
+
+            return dados;
         } catch {
             return {};
         }
@@ -54,7 +77,11 @@
 
     function own() {
         const usuario = payload();
-        const id = usuario.id ?? usuario.usuarioId ?? usuario.userId;
+
+        const id =
+            usuario.id ??
+            usuario.usuarioId ??
+            usuario.userId;
 
         return Boolean(
             id && Number(state.id) === Number(id)
@@ -62,42 +89,86 @@
     }
 
     function escapeHTML(valor) {
-        return String(valor ?? "").replace(/[&<>"']/g, c => ({
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;"
-        }[c]));
+        return String(valor ?? "").replace(
+            /[&<>"']/g,
+            caractere => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            }[caractere])
+        );
     }
+
 
     function imagePath(caminho, fallback) {
         if (!caminho) return fallback;
 
-        if (/^(https?:\/\/|data:|blob:)/i.test(caminho)) {
-            return caminho;
+        const valor = String(caminho).trim().replace(/\\/g, "/");
+
+        if (!valor) return fallback;
+
+        if (/^(https?:\/\/|data:|blob:)/i.test(valor)) {
+            return valor;
         }
 
-        return `${base.replace(/\/+$/, "")}/${String(caminho).replace(/^\/+/, "")}`;
+        const supabaseUrl =
+            "https://hepwnbumziimvfugvjbe.supabase.co";
+
+        const caminhoLimpo = valor
+            .replace(/^\/+/, "")
+            .replace(/^midias\//, "");
+
+        if (
+            caminhoLimpo.startsWith("perfil/") ||
+            caminhoLimpo.startsWith("perfis/") ||
+            caminhoLimpo.startsWith("usuarios/") ||
+            caminhoLimpo.startsWith("template/") ||
+            caminhoLimpo.startsWith("templates/") ||
+            caminhoLimpo.startsWith("publicacoes/") ||
+            caminhoLimpo.startsWith("noticias/")
+        ) {
+            return `${supabaseUrl}/storage/v1/object/public/midias/${caminhoLimpo}`;
+        }
+
+        return `${base}/${caminhoLimpo}`;
     }
+
 
     function get(id) {
         return area.querySelector(`#${id}`);
     }
 
     async function request(path, options = {}) {
+        const jwt = token();
+
+        if (!jwt) {
+            throw new Error(
+                "Sua sessão expirou. Faça login novamente."
+            );
+        }
+
         const headers = {
-            Authorization: `Bearer ${token()}`,
+            Authorization: `Bearer ${jwt}`,
             ...(options.body instanceof FormData
                 ? {}
                 : { "Content-Type": "application/json" }),
             ...(options.headers || {})
         };
 
-        const resposta = await fetch(`${base}${path}`, {
-            ...options,
-            headers
-        });
+        let resposta;
+
+        try {
+            resposta = await fetch(`${base}${path}`, {
+                ...options,
+                headers
+            });
+        } catch {
+            throw new Error(
+                "Não foi possível conectar ao servidor."
+            );
+        }
 
         const dados = await resposta.json().catch(() => ({}));
 
@@ -105,6 +176,7 @@
             const erro = new Error(
                 dados.mensagem ||
                 dados.erro ||
+                dados.error ||
                 dados.message ||
                 `Erro ${resposta.status}`
             );
@@ -143,17 +215,28 @@
             : [];
     }
 
-    function achatarComentarios(comentarios, publicacao, resultado = []) {
+    function achatarComentarios(
+        comentarios,
+        publicacao,
+        resultado = []
+    ) {
         for (const comentario of comentarios) {
             resultado.push({
                 ...comentario,
                 publicacaoId: publicacao.id
             });
 
-            const respostas = comentario.respostas || comentario.replies || [];
+            const respostas =
+                comentario.respostas ||
+                comentario.replies ||
+                [];
 
             if (Array.isArray(respostas)) {
-                achatarComentarios(respostas, publicacao, resultado);
+                achatarComentarios(
+                    respostas,
+                    publicacao,
+                    resultado
+                );
             }
         }
 
@@ -161,14 +244,20 @@
     }
 
     function normalizarCurtida(item) {
-        if (!item || typeof item !== "object") return null;
+        if (!item || typeof item !== "object") {
+            return null;
+        }
 
         if (item.publicacao) return item.publicacao;
         if (item.postagem) return item.postagem;
 
         if (
             item.id !== undefined &&
-            (item.texto !== undefined || item.autor || item.usuario)
+            (
+                item.texto !== undefined ||
+                item.autor ||
+                item.usuario
+            )
         ) {
             return item;
         }
@@ -181,7 +270,9 @@
 
         const valor = new Date(data);
 
-        if (Number.isNaN(valor.getTime())) return "";
+        if (Number.isNaN(valor.getTime())) {
+            return "";
+        }
 
         return valor.toLocaleString("pt-BR", {
             day: "2-digit",
@@ -212,13 +303,24 @@
             <main class="pagina-perfil">
                 <section class="perfil">
                     <div class="topo">
-                        <img id="banner" src="${bannerDefault}" alt="Banner">
+                        <img
+                            id="banner"
+                            src="${bannerDefault}"
+                            alt="Banner"
+                        >
                     </div>
 
-                    <img id="foto" class="foto" src="${avatar}" alt="Foto do perfil">
+                    <img
+                        id="foto"
+                        class="foto"
+                        src="${avatar}"
+                        alt="Foto do perfil"
+                    >
 
                     <div class="conteudo">
-                        <h1 class="nome" id="nome">Carregando...</h1>
+                        <h1 class="nome" id="nome">
+                            Carregando...
+                        </h1>
 
                         <p class="info">
                             <strong>REDE:</strong>
@@ -230,23 +332,42 @@
                         <div class="categoria" id="categoria"></div>
 
                         <div class="estatisticas">
-                            <div class="card" data-atividade="publicacoes" role="button" tabindex="0">
+                            <div
+                                class="card"
+                                data-atividade="publicacoes"
+                                role="button"
+                                tabindex="0"
+                            >
                                 <h2 id="totalPublicacoes">0</h2>
                                 <span>Publicações</span>
                             </div>
 
-                            <div class="card" data-atividade="comentarios" role="button" tabindex="0">
+                            <div
+                                class="card"
+                                data-atividade="comentarios"
+                                role="button"
+                                tabindex="0"
+                            >
                                 <h2 id="totalComentarios">0</h2>
                                 <span>Comentários</span>
                             </div>
 
-                            <div class="card" data-atividade="curtidas" role="button" tabindex="0">
+                            <div
+                                class="card"
+                                data-atividade="curtidas"
+                                role="button"
+                                tabindex="0"
+                            >
                                 <h2 id="totalCurtidas">0</h2>
                                 <span>Curtidas</span>
                             </div>
                         </div>
 
-                        <button id="btnEditarPerfil" type="button" hidden>
+                        <button
+                            id="btnEditarPerfil"
+                            type="button"
+                            hidden
+                        >
                             Editar Perfil
                         </button>
                     </div>
@@ -254,15 +375,27 @@
 
                 <section class="painel-atividades-perfil">
                     <div class="abas-atividades-perfil">
-                        <button type="button" class="aba-atividade ativa" data-atividade="publicacoes">
+                        <button
+                            type="button"
+                            class="aba-atividade ativa"
+                            data-atividade="publicacoes"
+                        >
                             Publicações
                         </button>
 
-                        <button type="button" class="aba-atividade" data-atividade="comentarios">
+                        <button
+                            type="button"
+                            class="aba-atividade"
+                            data-atividade="comentarios"
+                        >
                             Comentários
                         </button>
 
-                        <button type="button" class="aba-atividade" data-atividade="curtidas">
+                        <button
+                            type="button"
+                            class="aba-atividade"
+                            data-atividade="curtidas"
+                        >
                             Curtidas
                         </button>
                     </div>
@@ -273,7 +406,11 @@
 
             <div class="modal-fundo" id="modalFundo">
                 <div class="modal">
-                    <button class="fechar-modal" id="fecharModalPerfil" type="button">
+                    <button
+                        class="fechar-modal"
+                        id="fecharModalPerfil"
+                        type="button"
+                    >
                         ×
                     </button>
 
@@ -284,12 +421,21 @@
                             <label>Foto de Perfil</label>
 
                             <div class="preview-foto">
-                                <img id="previewFoto" src="${avatar}" alt="Prévia da foto">
+                                <img
+                                    id="previewFoto"
+                                    src="${avatar}"
+                                    alt="Prévia da foto"
+                                >
                             </div>
 
                             <label class="botao-imagem">
                                 Escolher imagem
-                                <input type="file" id="inputFoto" accept="image/*" hidden>
+                                <input
+                                    type="file"
+                                    id="inputFoto"
+                                    accept="image/*"
+                                    hidden
+                                >
                             </label>
                         </div>
 
@@ -297,39 +443,66 @@
                             <label>Foto de Banner</label>
 
                             <div class="preview-banner">
-                                <img id="previewBanner" src="${bannerDefault}" alt="Prévia do banner">
+                                <img
+                                    id="previewBanner"
+                                    src="${bannerDefault}"
+                                    alt="Prévia do banner"
+                                >
                             </div>
 
                             <label class="botao-imagem">
                                 Escolher imagem
-                                <input type="file" id="inputBanner" accept="image/*" hidden>
+                                <input
+                                    type="file"
+                                    id="inputBanner"
+                                    accept="image/*"
+                                    hidden
+                                >
                             </label>
                         </div>
                     </div>
 
                     <div class="campo-modal">
                         <label for="inputNome">Nome</label>
-                        <input id="inputNome" type="text" disabled>
+                        <input
+                            id="inputNome"
+                            type="text"
+                            disabled
+                        >
                     </div>
 
                     <div class="campo-modal">
-                        <label for="inputDescricao">Descrição</label>
+                        <label for="inputDescricao">
+                            Descrição
+                        </label>
+
                         <textarea id="inputDescricao"></textarea>
                     </div>
 
                     <div class="campo-modal campo-privacidade">
                         <label for="mostrarCurtidas">
-                            <input type="checkbox" id="mostrarCurtidas">
+                            <input
+                                type="checkbox"
+                                id="mostrarCurtidas"
+                            >
                             Mostrar minhas curtidas no perfil
                         </label>
                     </div>
 
                     <div class="botoes-modal">
-                        <button type="button" class="botao-salvar" id="salvarPerfilIntegrado">
+                        <button
+                            type="button"
+                            class="botao-salvar"
+                            id="salvarPerfilIntegrado"
+                        >
                             Salvar Alterações
                         </button>
 
-                        <button type="button" class="botao-cancelar" id="cancelarModalPerfil">
+                        <button
+                            type="button"
+                            class="botao-cancelar"
+                            id="cancelarModalPerfil"
+                        >
                             Cancelar
                         </button>
                     </div>
@@ -337,6 +510,7 @@
             </div>
         `;
     }
+
 
     function aplicarEstilos() {
         if (document.getElementById("estilosPerfilIntegrado")) return;
@@ -364,11 +538,11 @@
 
             #areaPerfil .perfil,
             #areaPerfil .painel-atividades-perfil {
-                background: rgba(253, 253, 253, .758);
+                background: var(--surface, #ffffff);
                 border-radius: 25px;
                 box-shadow:
-                    0 30px 60px rgba(0, 0, 0, .18),
-                    0 10px 20px rgba(0, 0, 0, .08);
+                    0 30px 60px rgba(0, 0, 0, .12),
+                    0 10px 20px rgba(0, 0, 0, .06);
             }
 
             #areaPerfil .perfil {
@@ -393,7 +567,7 @@
                 gap: 30px;
                 flex-shrink: 0;
                 margin-bottom: 20px;
-                border-bottom: 1px solid var(--border);
+                border-bottom: 1px solid var(--border, #dddddd);
             }
 
             #areaPerfil .aba-atividade {
@@ -401,7 +575,7 @@
                 background: transparent;
                 border: none;
                 border-bottom: 2px solid transparent;
-                color: var(--text);
+                color: var(--text, #333333);
                 font-family: inherit;
                 font-size: 14px;
                 cursor: pointer;
@@ -409,12 +583,12 @@
             }
 
             #areaPerfil .aba-atividade:hover {
-                color: var(--primary);
+                color: var(--primary, #795548);
             }
 
             #areaPerfil .aba-atividade.ativa {
-                color: var(--primary);
-                border-bottom-color: var(--primary);
+                color: var(--primary, #795548);
+                border-bottom-color: var(--primary, #795548);
                 font-weight: 700;
             }
 
@@ -427,15 +601,15 @@
                 overflow-y: auto;
                 padding-right: 8px;
                 scrollbar-width: thin;
-                scrollbar-color: var(--primary) transparent;
+                scrollbar-color: var(--primary, #795548) transparent;
             }
 
             #areaPerfil .perfil-publicacao {
                 padding: 18px;
-                background: #ffffff;
-                border: 1px solid var(--border);
+                background: var(--surface, #ffffff);
+                border: 1px solid var(--border, #dddddd);
                 border-radius: 14px;
-                color: var(--text);
+                color: var(--text, #333333);
                 box-shadow: 0 4px 12px rgba(0, 0, 0, .04);
             }
 
@@ -461,12 +635,12 @@
 
             #areaPerfil .perfil-publicacao-autor strong {
                 font-size: 13px;
-                color: var(--text);
+                color: var(--text, #333333);
             }
 
             #areaPerfil .perfil-publicacao-autor span {
                 font-size: 11px;
-                color: var(--textLight);
+                color: var(--textLight, #777777);
             }
 
             #areaPerfil .perfil-publicacao-texto {
@@ -482,7 +656,7 @@
                 align-items: center;
                 gap: 20px;
                 font-size: 12px;
-                color: var(--textLight);
+                color: var(--textLight, #777777);
             }
 
             #areaPerfil .perfil-publicacao-acoes span {
@@ -496,7 +670,7 @@
                 padding: 0;
                 background: transparent;
                 border: none;
-                color: var(--primary);
+                color: var(--primary, #795548);
                 font-family: inherit;
                 font-size: 12px;
                 font-weight: 600;
@@ -510,7 +684,7 @@
             #areaPerfil .perfil-atividades-vazio {
                 padding: 25px;
                 text-align: center;
-                color: var(--textLight);
+                color: var(--textLight, #777777);
                 font-size: 13px;
             }
 
@@ -524,19 +698,26 @@
                 border: none;
                 border-radius: 12px;
                 padding: 12px 20px;
-                background: var(--surface);
-                color: var(--primary);
+                background: var(--surface, #ffffff);
+                color: var(--primary, #795548);
                 font-family: inherit;
                 font-weight: 600;
                 cursor: pointer;
             }
 
             #areaPerfil #voltarFeedPerfil:hover {
-                background: var(--secondaryLight);
+                background: var(--secondaryLight, #eeeeee);
             }
 
             #areaPerfil #btnEditarPerfil[hidden] {
                 display: none;
+            }
+
+            #areaPerfil .perfil-publicacao-link:focus-visible,
+            #areaPerfil .aba-atividade:focus-visible,
+            #areaPerfil #voltarFeedPerfil:focus-visible {
+                outline: 2px solid var(--primary, #795548);
+                outline-offset: 3px;
             }
 
             @media (max-width: 650px) {
@@ -559,6 +740,15 @@
                     padding: 12px 8px;
                     font-size: 12px;
                 }
+
+                #areaPerfil .perfil-publicacao {
+                    padding: 14px;
+                }
+
+                #areaPerfil .perfil-publicacao-acoes {
+                    flex-wrap: wrap;
+                    gap: 12px;
+                }
             }
         `;
 
@@ -566,20 +756,27 @@
     }
 
     function renderStats() {
-        get("totalPublicacoes").textContent = state.publicacoes.filter(
-            p => uid(p) === state.id
+        const totalPublicacoes = state.publicacoes.filter(
+            publicacao => uid(publicacao) === state.id
         ).length;
 
-        get("totalComentarios").textContent = state.comentarios.length;
+        get("totalPublicacoes").textContent = totalPublicacoes;
 
-        get("totalCurtidas").textContent = state.curtidasPrivadas ||
-            state.erroCurtidas
+        get("totalComentarios").textContent =
+            state.comentarios.length;
+
+        get("totalCurtidas").textContent =
+            state.curtidasPrivadas || state.erroCurtidas
                 ? "—"
                 : state.curtidas.length;
     }
 
     function mensagem(texto) {
-        get("atividadesPerfil").innerHTML = `
+        const painel = get("atividadesPerfil");
+
+        if (!painel) return;
+
+        painel.innerHTML = `
             <p class="perfil-atividades-vazio">
                 ${escapeHTML(texto)}
             </p>
@@ -589,34 +786,58 @@
     function cabecalho(publicacao) {
         const autor = publicacao.autor || publicacao.usuario || {};
 
+        const imagem = imagePath(
+            autor.fotoPerfil,
+            avatar
+        );
+
         return `
             <div class="perfil-publicacao-cabecalho">
                 <img
                     class="perfil-publicacao-avatar"
-                    src="${escapeHTML(imagePath(autor.fotoPerfil, avatar))}"
+                    src="${escapeHTML(imagem)}"
                     alt="Foto do autor"
                     onerror="this.onerror=null;this.src='${avatar}'"
                 >
 
                 <div class="perfil-publicacao-autor">
-                    <strong>${escapeHTML(autor.nome || "Usuário")}</strong>
-                    <span>${escapeHTML(formatarData(publicacao.dataPublicacao))}</span>
+                    <strong>
+                        ${escapeHTML(autor.nome || "Usuário")}
+                    </strong>
+
+                    <span>
+                        ${escapeHTML(
+            formatarData(publicacao.dataPublicacao)
+        )}
+                    </span>
                 </div>
             </div>
         `;
     }
 
     function botaoPublicacao(id, comentarioId = null) {
-        if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
+        const postId = Number(id);
+
+        if (
+            !Number.isInteger(postId) ||
+            postId <= 0
+        ) {
             return "";
         }
+
+        const comentario = Number(comentarioId);
+
+        const atributoComentario =
+            Number.isInteger(comentario) && comentario > 0
+                ? `data-comment="${comentario}"`
+                : "";
 
         return `
             <button
                 type="button"
                 class="perfil-publicacao-link"
-                data-post="${Number(id)}"
-                ${comentarioId ? `data-comment="${Number(comentarioId)}"` : ""}
+                data-post="${postId}"
+                ${atributoComentario}
             >
                 Ver publicação
             </button>
@@ -625,11 +846,13 @@
 
     function renderPublicacoes() {
         const lista = state.publicacoes.filter(
-            p => uid(p) === state.id
+            publicacao => uid(publicacao) === state.id
         );
 
         if (!lista.length) {
-            mensagem("Este usuário ainda não fez nenhuma publicação.");
+            mensagem(
+                "Este usuário ainda não fez nenhuma publicação."
+            );
             return;
         }
 
@@ -638,13 +861,18 @@
                 ${cabecalho(publicacao)}
 
                 <div class="perfil-publicacao-texto">${escapeHTML(
-                    publicacao.texto || publicacao.conteudo || ""
-                )}</div>
+            publicacao.texto ||
+            publicacao.conteudo ||
+            ""
+        )}</div>
 
                 <div class="perfil-publicacao-acoes">
                     <span>
                         <i class="fa-solid fa-heart"></i>
-                        ${Array.isArray(publicacao.curtidas) ? publicacao.curtidas.length : 0}
+                        ${Array.isArray(publicacao.curtidas)
+                ? publicacao.curtidas.length
+                : 0
+            }
                     </span>
 
                     <span>
@@ -660,44 +888,67 @@
 
     function renderComentarios() {
         if (!state.comentarios.length) {
-            mensagem("Este usuário ainda não fez comentários.");
+            mensagem(
+                "Este usuário ainda não fez comentários."
+            );
             return;
         }
 
-        get("atividadesPerfil").innerHTML = state.comentarios.map(comentario => `
-            <article class="perfil-publicacao">
-                <div class="perfil-publicacao-cabecalho">
-                    <img
-                        class="perfil-publicacao-avatar"
-                        src="${escapeHTML(get("foto").src)}"
-                        alt="Foto do usuário"
-                    >
+        const foto = get("foto")?.src || avatar;
+        const nome = state.usuario?.nome || "Usuário";
 
-                    <div class="perfil-publicacao-autor">
-                        <strong>${escapeHTML(state.usuario.nome)}</strong>
-                        <span>${escapeHTML(formatarData(comentario.dataPublicacao))}</span>
+        get("atividadesPerfil").innerHTML = state.comentarios.map(
+            comentario => `
+                <article class="perfil-publicacao">
+                    <div class="perfil-publicacao-cabecalho">
+                        <img
+                            class="perfil-publicacao-avatar"
+                            src="${escapeHTML(foto)}"
+                            alt="Foto do usuário"
+                        >
+
+                        <div class="perfil-publicacao-autor">
+                            <strong>${escapeHTML(nome)}</strong>
+
+                            <span>
+                                ${escapeHTML(
+                formatarData(
+                    comentario.dataPublicacao
+                )
+            )}
+                            </span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="perfil-publicacao-texto">${escapeHTML(
-                    comentario.texto || comentario.conteudo || ""
-                )}</div>
+                    <div class="perfil-publicacao-texto">${escapeHTML(
+                comentario.texto ||
+                comentario.conteudo ||
+                ""
+            )}</div>
 
-                <div class="perfil-publicacao-acoes">
-                    ${botaoPublicacao(comentario.publicacaoId, comentario.id)}
-                </div>
-            </article>
-        `).join("");
+                    <div class="perfil-publicacao-acoes">
+                        ${botaoPublicacao(
+                comentario.publicacaoId,
+                comentario.id
+            )}
+                    </div>
+                </article>
+            `
+        ).join("");
     }
 
     function renderCurtidas() {
         if (state.curtidasPrivadas) {
-            mensagem("Este usuário optou por manter suas curtidas privadas.");
+            mensagem(
+                "Este usuário optou por manter suas curtidas privadas."
+            );
             return;
         }
 
         if (state.erroCurtidas) {
-            mensagem("Não foi possível carregar as curtidas.");
+            mensagem(
+                "Não foi possível carregar as curtidas."
+            );
             return;
         }
 
@@ -706,24 +957,28 @@
             return;
         }
 
-        get("atividadesPerfil").innerHTML = state.curtidas.map(publicacao => `
-            <article class="perfil-publicacao">
-                ${cabecalho(publicacao)}
+        get("atividadesPerfil").innerHTML = state.curtidas.map(
+            publicacao => `
+                <article class="perfil-publicacao">
+                    ${cabecalho(publicacao)}
 
-                <div class="perfil-publicacao-texto">${escapeHTML(
-                    publicacao.texto || publicacao.conteudo || ""
-                )}</div>
+                    <div class="perfil-publicacao-texto">${escapeHTML(
+                publicacao.texto ||
+                publicacao.conteudo ||
+                ""
+            )}</div>
 
-                <div class="perfil-publicacao-acoes">
-                    <span>
-                        <i class="fa-solid fa-heart"></i>
-                        Curtido
-                    </span>
+                    <div class="perfil-publicacao-acoes">
+                        <span>
+                            <i class="fa-solid fa-heart"></i>
+                            Curtido
+                        </span>
 
-                    ${botaoPublicacao(publicacao.id)}
-                </div>
-            </article>
-        `).join("");
+                        ${botaoPublicacao(publicacao.id)}
+                    </div>
+                </article>
+            `
+        ).join("");
     }
 
     function renderActivity() {
@@ -742,7 +997,9 @@
     }
 
     function selecionarAba(tipo) {
-        if (!["publicacoes", "comentarios", "curtidas"].includes(tipo)) {
+        if (
+            !["publicacoes", "comentarios", "curtidas"].includes(tipo)
+        ) {
             return;
         }
 
@@ -756,13 +1013,19 @@
         });
 
         const painel = get("atividadesPerfil");
-        painel.scrollTop = 0;
+
+        if (painel) {
+            painel.scrollTop = 0;
+        }
 
         renderActivity();
     }
 
     async function load(id) {
-        state.id = Number(id);
+        const usuarioId = Number(id);
+        const numeroRequisicao = ++requisicaoAtual;
+
+        state.id = usuarioId;
         state.usuario = null;
         state.publicacoes = [];
         state.comentarios = [];
@@ -772,7 +1035,13 @@
         state.carregando = true;
 
         get("nome").textContent = "Carregando...";
+        get("rede").textContent = "";
+        get("descricao").textContent = "";
+        get("categoria").textContent = "";
+        get("foto").src = avatar;
+        get("banner").src = bannerDefault;
         get("btnEditarPerfil").hidden = true;
+
         get("totalPublicacoes").textContent = "0";
         get("totalComentarios").textContent = "0";
         get("totalCurtidas").textContent = "0";
@@ -780,13 +1049,22 @@
         selecionarAba("publicacoes");
 
         try {
-            state.usuario = await request(
-                `/usuarios/buscar/${state.id}`
+            const respostaUsuario = await request(
+                `/usuarios/buscar/${usuarioId}`
             );
 
-            const usuario = state.usuario;
+            if (numeroRequisicao !== requisicaoAtual) return;
 
-            get("nome").textContent = usuario.nome || "Usuário";
+            const usuario = respostaUsuario.usuario || respostaUsuario;
+
+            if (!usuario || !usuario.id) {
+                throw new Error("Usuário não encontrado.");
+            }
+
+            state.usuario = usuario;
+
+            get("nome").textContent =
+                usuario.nome || "Usuário";
 
             get("rede").textContent =
                 usuario.empresa?.nome || "Não informado";
@@ -795,124 +1073,251 @@
                 usuario.bio ||
                 "Este usuário ainda não adicionou uma descrição.";
 
-            get("categoria").textContent = role(usuario.tipo);
+            get("categoria").textContent =
+                role(usuario.tipo);
 
-            get("foto").src = imagePath(
+            const foto = get("foto");
+            const banner = get("banner");
+
+            foto.src = imagePath(
                 usuario.fotoPerfil,
                 avatar
             );
 
-            get("banner").src = imagePath(
+            banner.src = imagePath(
                 usuario.template,
                 bannerDefault
             );
 
-            get("foto").onerror = () => {
-                get("foto").onerror = null;
-                get("foto").src = avatar;
+            foto.onerror = () => {
+                foto.onerror = null;
+                foto.src = avatar;
             };
 
-            get("banner").onerror = () => {
-                get("banner").onerror = null;
-                get("banner").src = bannerDefault;
+            banner.onerror = () => {
+                banner.onerror = null;
+                banner.src = bannerDefault;
             };
 
             get("btnEditarPerfil").hidden = !own();
 
-            const dados = await request("/publicacoes/listar");
-
-            state.publicacoes = obterLista(dados, [
-                "publicacoes",
-                "lista"
-            ]);
-
-            state.comentarios = state.publicacoes.flatMap(publicacao =>
-                achatarComentarios(
-                    obterComentarios(publicacao),
-                    publicacao
-                )
-            ).filter(comentario =>
-                uid(comentario) === state.id
+            const respostaPublicacoes = await request(
+                "/publicacoes/listar"
             );
 
-            if (!own() && usuario.mostrarCurtidas !== true) {
+            if (numeroRequisicao !== requisicaoAtual) return;
+
+            state.publicacoes = obterLista(
+                respostaPublicacoes,
+                ["publicacoes", "lista"]
+            );
+
+            const publicacoesComComentarios = await Promise.all(
+                state.publicacoes.map(async publicacao => {
+                    if (Array.isArray(publicacao.comentarios)) {
+                        return publicacao;
+                    }
+
+                    try {
+                        const resposta = await request(
+                            `/comentarios/publicacao/${publicacao.id}`
+                        );
+
+                        return {
+                            ...publicacao,
+                            comentarios: obterLista(
+                                resposta,
+                                ["comentarios", "lista"]
+                            )
+                        };
+                    } catch (erro) {
+                        console.warn(
+                            `Não foi possível carregar comentários da publicação ${publicacao.id}:`,
+                            erro.message
+                        );
+
+                        return {
+                            ...publicacao,
+                            comentarios: []
+                        };
+                    }
+                })
+            );
+
+            if (numeroRequisicao !== requisicaoAtual) return;
+
+            state.publicacoes = publicacoesComComentarios;
+
+            state.comentarios = state.publicacoes
+                .flatMap(publicacao =>
+                    achatarComentarios(
+                        obterComentarios(publicacao),
+                        publicacao
+                    )
+                )
+                .filter(comentario =>
+                    uid(comentario) === state.id
+                );
+
+            if (
+                !own() &&
+                usuario.mostrarCurtidas !== true
+            ) {
                 state.curtidasPrivadas = true;
             } else {
                 try {
-                    const dadosCurtidas = await request(
-                        `/usuarios/${state.id}/curtidas`
+                    const respostaCurtidas = await request(
+                        `/usuarios/${usuarioId}/curtidas`
                     );
 
-                    state.curtidas = obterLista(dadosCurtidas, [
-                        "curtidas",
-                        "publicacoes",
-                        "lista"
-                    ])
+                    if (numeroRequisicao !== requisicaoAtual) return;
+
+                    state.curtidas = obterLista(
+                        respostaCurtidas,
+                        ["curtidas", "publicacoes", "lista"]
+                    )
                         .map(normalizarCurtida)
                         .filter(Boolean);
-
                 } catch (erro) {
+                    if (numeroRequisicao !== requisicaoAtual) return;
+
                     if (erro.status === 403) {
                         state.curtidasPrivadas = true;
                     } else {
                         state.erroCurtidas = true;
-                        console.error("Erro ao carregar curtidas:", erro);
+
+                        console.error(
+                            "Erro ao carregar curtidas:",
+                            erro
+                        );
                     }
                 }
             }
 
-            renderStats();
+            if (numeroRequisicao !== requisicaoAtual) return;
 
+            renderStats();
         } finally {
-            state.carregando = false;
-            renderActivity();
+            if (numeroRequisicao === requisicaoAtual) {
+                state.carregando = false;
+                renderActivity();
+            }
         }
     }
 
-   
-function goPost(id) {
-    const postId = Number(id);
+    function goPost(id, comentarioId = null) {
+        const postId = Number(id);
 
-    if (!Number.isInteger(postId) || postId <= 0) return;
-
-    window.voltarAoFeed?.();
-
-    requestAnimationFrame(() => {
-        const publicacao = [...document.querySelectorAll("#areaFeed [data-post-id]")]
-            .find(post => Number(post.dataset.postId) === postId);
-
-        if (!publicacao) {
-            console.warn("Publicação não encontrada:", postId);
+        if (
+            !Number.isInteger(postId) ||
+            postId <= 0
+        ) {
             return;
         }
 
-        document.querySelectorAll("#areaFeed .perfil-destaque").forEach(elemento => {
-            elemento.classList.remove("perfil-destaque");
+        if (
+            typeof window.abrirPublicacaoNotificacao === "function"
+        ) {
+            window.voltarAoFeed?.();
+
+            window.abrirPublicacaoNotificacao(postId);
+
+            return;
+        }
+
+        window.voltarAoFeed?.();
+
+        requestAnimationFrame(() => {
+            const publicacao = [
+                ...document.querySelectorAll(
+                    "#areaFeed [data-post-id]"
+                )
+            ].find(post =>
+                Number(post.dataset.postId) === postId
+            );
+
+            if (!publicacao) {
+                console.warn(
+                    "Publicação não encontrada no feed:",
+                    postId
+                );
+
+                alert(
+                    "Não foi possível localizar essa publicação no feed."
+                );
+
+                return;
+            }
+
+            document
+                .querySelectorAll(
+                    "#areaFeed .perfil-destaque"
+                )
+                .forEach(elemento => {
+                    elemento.classList.remove(
+                        "perfil-destaque"
+                    );
+                });
+
+            publicacao.scrollIntoView({
+                behavior: "smooth",
+                block: "center"
+            });
+
+            publicacao.classList.add(
+                "perfil-destaque"
+            );
+
+            setTimeout(() => {
+                publicacao.classList.remove(
+                    "perfil-destaque"
+                );
+            }, 3500);
+
+            const idComentario = Number(comentarioId);
+
+            if (
+                Number.isInteger(idComentario) &&
+                idComentario > 0
+            ) {
+                const botaoComentarios =
+                    publicacao.querySelector(
+                        '[data-acao="comentarios"]'
+                    );
+
+                const containerComentarios =
+                    document.getElementById(
+                        `comentarios-${postId}`
+                    );
+
+                if (
+                    botaoComentarios &&
+                    containerComentarios &&
+                    !containerComentarios.classList.contains("aberto")
+                ) {
+                    botaoComentarios.click();
+                }
+            }
         });
-
-        publicacao.scrollIntoView({
-            behavior: "smooth",
-            block: "center"
-        });
-
-        publicacao.classList.add("perfil-destaque");
-
-        setTimeout(() => {
-            publicacao.classList.remove("perfil-destaque");
-        }, 3500);
-    });
-}
+    }
 
     function openModal() {
         if (!own() || !state.usuario) return;
 
-        get("inputNome").value = state.usuario.nome || "";
-        get("inputDescricao").value = state.usuario.bio || "";
+        get("inputNome").value =
+            state.usuario.nome || "";
+
+        get("inputDescricao").value =
+            state.usuario.bio || "";
+
         get("mostrarCurtidas").checked =
             state.usuario.mostrarCurtidas === true;
 
-        get("previewFoto").src = get("foto").src;
-        get("previewBanner").src = get("banner").src;
+        get("previewFoto").src =
+            get("foto").src;
+
+        get("previewBanner").src =
+            get("banner").src;
 
         get("inputFoto").value = "";
         get("inputBanner").value = "";
@@ -921,11 +1326,16 @@ function goPost(id) {
     }
 
     function closeModal() {
-        get("modalFundo").style.display = "none";
+        const modal = get("modalFundo");
+
+        if (modal) {
+            modal.style.display = "none";
+        }
     }
 
     async function upload(path, arquivo, method) {
         const formData = new FormData();
+
         formData.append("arquivo", arquivo);
 
         return request(path, {
@@ -938,15 +1348,24 @@ function goPost(id) {
         if (!own() || !state.usuario) return;
 
         const botao = get("salvarPerfilIntegrado");
+
+        if (botao.disabled) return;
+
         botao.disabled = true;
         botao.textContent = "Salvando...";
 
         try {
-            const bio = get("inputDescricao").value.trim();
-            const privacidade = get("mostrarCurtidas").checked;
+            const bio =
+                get("inputDescricao").value.trim();
 
-            const fotoNova = get("inputFoto").files[0];
-            const bannerNovo = get("inputBanner").files[0];
+            const privacidade =
+                get("mostrarCurtidas").checked;
+
+            const fotoNova =
+                get("inputFoto").files[0];
+
+            const bannerNovo =
+                get("inputBanner").files[0];
 
             let alterou = false;
 
@@ -955,25 +1374,39 @@ function goPost(id) {
                     `/usuarios/atualizar/${state.id}`,
                     {
                         method: "PUT",
-                        body: JSON.stringify({ bio })
+                        body: JSON.stringify({
+                            bio
+                        })
                     }
                 );
 
                 alterou = true;
             }
 
-            if (privacidade !== (state.usuario.mostrarCurtidas === true)) {
-                await request("/usuarios/privacidade", {
-                    method: "PUT",
-                    body: JSON.stringify({
-                        mostrarCurtidas: privacidade
-                    })
-                });
+            if (
+                privacidade !==
+                (state.usuario.mostrarCurtidas === true)
+            ) {
+                await request(
+                    "/usuarios/privacidade",
+                    {
+                        method: "PUT",
+                        body: JSON.stringify({
+                            mostrarCurtidas: privacidade
+                        })
+                    }
+                );
 
                 alterou = true;
             }
 
             if (fotoNova) {
+                if (!fotoNova.type.startsWith("image/")) {
+                    throw new Error(
+                        "Selecione uma imagem válida para a foto do perfil."
+                    );
+                }
+
                 await upload(
                     "/usuarios/foto-perfil",
                     fotoNova,
@@ -984,6 +1417,12 @@ function goPost(id) {
             }
 
             if (bannerNovo) {
+                if (!bannerNovo.type.startsWith("image/")) {
+                    throw new Error(
+                        "Selecione uma imagem válida para o banner."
+                    );
+                }
+
                 await upload(
                     `/usuarios/template/${state.id}`,
                     bannerNovo,
@@ -994,18 +1433,36 @@ function goPost(id) {
             }
 
             if (!alterou) {
-                alert("Nenhuma alteração foi realizada.");
+                alert(
+                    "Nenhuma alteração foi realizada."
+                );
+
                 return;
             }
 
             closeModal();
+
             await load(state.id);
 
-            alert("Perfil atualizado com sucesso!");
+            if (
+                typeof window.atualizarFeed === "function"
+            ) {
+                await window.atualizarFeed();
+            }
 
+            alert(
+                "Perfil atualizado com sucesso!"
+            );
         } catch (erro) {
-            console.error("Erro ao salvar perfil:", erro);
-            alert(erro.message || "Erro ao atualizar perfil.");
+            console.error(
+                "Erro ao salvar perfil:",
+                erro
+            );
+
+            alert(
+                erro.message ||
+                "Erro ao atualizar perfil."
+            );
         } finally {
             botao.disabled = false;
             botao.textContent = "Salvar Alterações";
@@ -1013,9 +1470,12 @@ function goPost(id) {
     }
 
     function bind() {
-        get("voltarFeedPerfil").addEventListener("click", () => {
-            window.voltarAoFeed?.();
-        });
+        get("voltarFeedPerfil").addEventListener(
+            "click",
+            () => {
+                window.voltarAoFeed?.();
+            }
+        );
 
         get("btnEditarPerfil").addEventListener(
             "click",
@@ -1037,69 +1497,129 @@ function goPost(id) {
             save
         );
 
-        get("modalFundo").addEventListener("click", evento => {
-            if (evento.target === get("modalFundo")) {
-                closeModal();
+        get("modalFundo").addEventListener(
+            "click",
+            evento => {
+                if (
+                    evento.target ===
+                    get("modalFundo")
+                ) {
+                    closeModal();
+                }
             }
-        });
+        );
+
+        document.addEventListener(
+            "keydown",
+            evento => {
+                if (
+                    evento.key === "Escape" &&
+                    get("modalFundo")?.style.display === "flex"
+                ) {
+                    closeModal();
+                }
+            }
+        );
 
         for (const [input, preview] of [
             ["inputFoto", "previewFoto"],
             ["inputBanner", "previewBanner"]
         ]) {
-            get(input).addEventListener("change", evento => {
-                const arquivo = evento.target.files[0];
+            get(input).addEventListener(
+                "change",
+                evento => {
+                    const arquivo =
+                        evento.target.files[0];
 
-                if (!arquivo) return;
+                    if (!arquivo) return;
 
-                const leitor = new FileReader();
+                    if (!arquivo.type.startsWith("image/")) {
+                        alert(
+                            "Selecione um arquivo de imagem válido."
+                        );
 
-                leitor.onload = () => {
-                    get(preview).src = leitor.result;
-                };
+                        evento.target.value = "";
+                        return;
+                    }
 
-                leitor.readAsDataURL(arquivo);
-            });
+                    const leitor = new FileReader();
+
+                    leitor.onload = () => {
+                        get(preview).src =
+                            leitor.result;
+                    };
+
+                    leitor.readAsDataURL(
+                        arquivo
+                    );
+                }
+            );
         }
 
-        area.querySelectorAll("[data-atividade]").forEach(elemento => {
-            const executar = () => {
-                selecionarAba(elemento.dataset.atividade);
-            };
+        area
+            .querySelectorAll("[data-atividade]")
+            .forEach(elemento => {
+                const executar = () => {
+                    selecionarAba(
+                        elemento.dataset.atividade
+                    );
+                };
 
-            elemento.addEventListener("click", executar);
+                elemento.addEventListener(
+                    "click",
+                    executar
+                );
 
-            if (elemento.getAttribute("role") === "button") {
-                elemento.addEventListener("keydown", evento => {
-                    if (evento.key === "Enter" || evento.key === " ") {
-                        evento.preventDefault();
-                        executar();
-                    }
-                });
+                if (
+                    elemento.getAttribute("role") === "button"
+                ) {
+                    elemento.addEventListener(
+                        "keydown",
+                        evento => {
+                            if (
+                                evento.key === "Enter" ||
+                                evento.key === " "
+                            ) {
+                                evento.preventDefault();
+                                executar();
+                            }
+                        }
+                    );
+                }
+            });
+
+        get("atividadesPerfil").addEventListener(
+            "click",
+            evento => {
+                const botao = evento.target.closest(
+                    "[data-post]"
+                );
+
+                if (!botao) return;
+
+                goPost(
+                    botao.dataset.post,
+                    botao.dataset.comment
+                );
             }
-        });
-
-        get("atividadesPerfil").addEventListener("click", evento => {
-            const botao = evento.target.closest("[data-post]");
-
-            if (!botao) return;
-
-            goPost(
-                botao.dataset.post,
-                botao.dataset.comment
-            );
-        });
+        );
     }
 
     async function open(id) {
         const usuarioId = Number(id);
 
-        if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+        if (
+            !Number.isInteger(usuarioId) ||
+            usuarioId <= 0
+        ) {
             return;
         }
 
         if (!area.dataset.initialized) {
             area.innerHTML = markup();
+
+            aplicarEstilos();
+
             area.dataset.initialized = "true";
 
             bind();
@@ -1110,8 +1630,16 @@ function goPost(id) {
         try {
             await load(usuarioId);
         } catch (erro) {
-            console.error("Erro ao abrir perfil:", erro);
-            alert(erro.message || "Erro ao abrir perfil.");
+            console.error(
+                "Erro ao abrir perfil:",
+                erro
+            );
+
+            alert(
+                erro.message ||
+                "Não foi possível abrir o perfil."
+            );
+
             window.voltarAoFeed?.();
         }
     }
